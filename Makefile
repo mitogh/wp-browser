@@ -94,7 +94,7 @@ ci_setup_db:
 	# Start just the database container.
 	docker-compose -f docker/${COMPOSE_FILE} up -d db
 	# Wait until DB is initialized.
-	docker-compose -f docker/${COMPOSE_FILE} run --rm waiter
+	docker-compose -f docker/${COMPOSE_FILE} run --rm db_waiter
 	# Create the databases that will be used in the tests.
 	docker-compose -f docker/${COMPOSE_FILE} exec db bash -c 'mysql -u root -e "create database if not exists test_site"'
 	docker-compose -f docker/${COMPOSE_FILE} exec db bash -c 'mysql -u root -e "create database if not exists test"'
@@ -166,6 +166,7 @@ ci_before_script:
 	vendor/bin/codecept build
 
 ci_script:
+	docker-compose -f docker/docker-compose.yml run --rm test acceptance
 	vendor/bin/codecept run acceptance
 	vendor/bin/codecept run cli
 	vendor/bin/codecept run climodule
