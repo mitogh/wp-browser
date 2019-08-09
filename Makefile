@@ -166,7 +166,6 @@ ci_before_script:
 	vendor/bin/codecept build
 
 ci_script:
-	docker-compose -f docker/docker-compose.yml run --rm test acceptance
 	vendor/bin/codecept run acceptance
 	vendor/bin/codecept run cli
 	vendor/bin/codecept run climodule
