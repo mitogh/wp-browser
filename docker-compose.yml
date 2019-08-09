@@ -1,0 +1,22 @@
+version: '3.2'
+
+services:
+
+  wpbrowser:
+    # Instead of using a pre-built image, let's build it from the file.
+    build:
+      context: ./docker/wpbrowser
+      dockerfile: Dockerfile
+      args:
+        # By default use PHP 7.3 but allow overriding the version.
+        - BUILD_PHP_VERSION=${TEST_PHP_VERSION:-7.3}
+    volumes:
+      # Bind the project files into the /project directory.
+      - ./:/project
+    environment:
+      # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
+      # Build systems are usually Linux-based.
+      # Use default port, 9000, by default.
+      XDEBUG_CONFIG: "remote_host=${XDEBUG_REMOTE_HOST:-host.docker.internal} remote_port=${XDEBUG_REMOTE_PORT:-9000}"
+      # I use PHPStorm as IDE and this makes the handshake easier.
+      PHP_IDE_CONFIG: "serverName=wp.test"
