@@ -5,55 +5,22 @@
  * @package Codeception\Command
  */
 
-
 namespace Codeception\Command;
 
-use Codeception\CustomCommandInterface;
-use Symfony\Component\Console\Command\Command;
-use Symfony\Component\Console\Exception\LogicException;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process as SymfonyProcess;
-use tad\WPBrowser\Adapters\Process;
-use tad\WPBrowser\Environment\OperatingSystem;
+use tad\WPBrowser\Command\CustomCommand;
 
 /**
  * Class ContainerRun
  *
  * @package Codeception\Command
  */
-class ContainerRun extends Command implements CustomCommandInterface
+class ContainerRun extends CustomCommand
 {
-    /**
-     * An instance of the operating system adapter.
-     *
-     * @var OperatingSystem
-     */
-    protected $operatingSystem;
-
-    /**
-     * An instance of the Symfony Process adapter.
-     *
-     * @var Process
-     */
-    protected $process;
-
-    /**
-     * ContainerRun constructor.
-     *
-     * @param string|null          $name            The name of the command; passing null means it must be set in
-     *                                              configure().
-     * @param OperatingSystem|null $operatingSystem The operating system abstraction adapter instance.
-     * @param Process|null         $process         An instance of the Symfony Process adapter.
-     */
-    public function __construct($name = null, OperatingSystem $operatingSystem = null, Process $process = null)
-    {
-        parent::__construct($name);
-        $this->operatingSystem = $operatingSystem ?: new OperatingSystem();
-        $this->process         = $process ?: new Process();
-    }
 
     /**
      * Returns the name of the command.
@@ -81,21 +48,54 @@ class ContainerRun extends Command implements CustomCommandInterface
     }
 
     /**
-     * Returns the commmand line the command would run.
+     * Returns the command output, if any.
      *
-     * @since TBD
+     * @param InputInterface       $input  The current input.
+     * @param OutputInterface|null $output The current output instance, if any.
+     *
+     * @return string The command output, if any.
+     */
+    public function getOutput(InputInterface $input, OutputInterface $output = null)
+    {
+        $process = $this->getProcess($input, $output);
+        $process->mustRun();
+
+        return $process->getOutput();
+    }
+
+    /**
+     * Returns the command Symfony Process, ready to run.
+     *
+     * @param InputInterface  $input  The current input.
+     * @param OutputInterface $output The current output, if any.
+     *
+     * @return SymfonyProcess The command Symfony process, ready to run.
+     */
+    public function getProcess(InputInterface $input, OutputInterface $output = null)
+    {
+        $command = $this->getCommandLine($input, $output);
+
+        $env = [];
+        if (isset($_SERVER['PATH'])) {
+            $env['PATH'] = $_SERVER['PATH'];
+        }
+
+        return $this->commandSupport->getProcessForCommand($command, codecept_root_dir(), $env);
+    }
+
+    /**
+     * Returns the command line, in array format, the command would run.
      *
      * @param InputInterface       $input  The current input.
      * @param OutputInterface|null $output The current output.
      *
-     * @return string The command line the the command would run.
+     * @return array The process command line, in array format.
      */
-    public function getShellCommand(InputInterface $input, OutputInterface $output = null)
+    public function getCommandLine(InputInterface $input, OutputInterface $output = null)
     {
-        $preCommand            = '';
         $dockerComposeBin      = 'docker-compose';
         $dockerComposeCommand  = 'run';
-        $dockerComposeOptions  = '--rm';
+        $dockerComposeOptions  = [ '--rm' ];
         $containerName         = $input->hasOption('container-name') ?
             $input->getOption('container-name')
             : 'wpbrowser';
@@ -103,60 +103,22 @@ class ContainerRun extends Command implements CustomCommandInterface
         $codeceptArgs          = "run {$suite}";
         $codeceptOutputOptions = $this->parseOutputOptions($output);
 
-        $os = $this->operatingSystem->getFamily();
-
-        if ($os === 'Linux') {
-            $preCommand           = 'XDEBUG_REMOTE_HOST="$(ip -4 addr show docker0 | grep -Po \'inet \K[\d.]+\')"';
-            $dockerComposeOptions .= ' -e XDEBUG_REMOTE_HOST="${XDEBUG_REMOTE_HOST}"';
-        }
-
-        return array_map(
-            'trim',
-            array_filter(
-                [
-                    $preCommand,
-                    $dockerComposeBin,
-                    $dockerComposeCommand,
-                    $dockerComposeOptions,
-                    $containerName,
-                    $codeceptArgs,
-                    $codeceptOutputOptions
-                ]
-            )
+        $hostAddress            = $this->commandSupport->getCommandOutput(
+            ContainerHostAddress::class,
+            $input,
+            $output
         );
-    }
+        $dockerComposeOptions[] = '-e';
+        $dockerComposeOptions[] = 'XDEBUG_REMOTE_HOST=' . $hostAddress;
 
-    /**
-     * {@inheritDoc}
-     */
-    protected function configure()
-    {
-        $this->setDescription('Runs Codeception in containers.')
-             ->addArgument('suite', InputArgument::OPTIONAL, 'The name of the suite to run.', 'unit')
-             ->addOption(
-                 'container-name',
-                 null,
-                 InputOption::VALUE_OPTIONAL,
-                 'The name of the container that should be used to run the tests in the docker-compose stack.',
-                 'wpbrowser'
-             );
-    }
+        $commandLine   = [];
+        $commandLine[] = $dockerComposeBin;
+        $commandLine[] = $dockerComposeCommand;
+        $commandLine   = array_merge($commandLine, array_map('trim', $dockerComposeOptions));
+        $commandLine[] = $containerName;
+        $commandLine[] = $codeceptArgs . $codeceptOutputOptions;
 
-    /**
-     * {@inheritDoc}
-     */
-    protected function execute(InputInterface $input, OutputInterface $output)
-    {
-        $command = $this->getShellCommand($input, $output);
-
-        $env = [];
-        if (isset($_SERVER['PATH'])) {
-            $env['PATH'] = $_SERVER['PATH'];
-        }
-
-        $runnerProcess = $this->process->forCommand($command, codecept_root_dir(), $env);
-
-        $runnerProcess->run([ $this, 'handleOutput' ]);
+        return $commandLine;
     }
 
     /**
@@ -191,6 +153,31 @@ class ContainerRun extends Command implements CustomCommandInterface
             }
         }
 
-        return trim(implode(' ', $options));
+        return count($options) ? ' ' . trim(implode(' ', $options)) : '';
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected function configure()
+    {
+        $this->setDescription('Runs Codeception in containers.')
+             ->addArgument('suite', InputArgument::OPTIONAL, 'The name of the suite to run.', 'unit')
+             ->addOption(
+                 'container-name',
+                 null,
+                 InputOption::VALUE_OPTIONAL,
+                 'The name of the container that should be used to run the tests in the docker-compose stack.',
+                 'wpbrowser'
+             );
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected function execute(InputInterface $input, OutputInterface $output)
+    {
+        $process = $this->getProcess($input, $output);
+        $process->run([ $this, 'handleOutput' ]);
     }
 }

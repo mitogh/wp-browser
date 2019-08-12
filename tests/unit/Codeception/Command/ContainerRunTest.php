@@ -1,26 +1,19 @@
 <?php namespace Codeception\Command;
 
-use Codeception\Stub\Expected;
+use Codeception\Test\Unit;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
-use tad\WPBrowser\Adapters\Process;
+use Symfony\Component\Process\Process;
+use Symfony\Component\Process\Process as SymfonyProcess;
+use tad\WPBrowser\Command\CommandSupportInterface;
 use tad\WPBrowser\Environment\OperatingSystem;
-use \Symfony\Component\Process\Process as SymfonyProcess;
 
-class ContainerRunTest extends \Codeception\Test\Unit
+class ContainerRunTest extends Unit
 {
     /**
      * @var \UnitTester
      */
     protected $tester;
-
-    protected function _before()
-    {
-    }
-
-    protected function _after()
-    {
-    }
 
     /**
      * It should be instantiable
@@ -35,16 +28,17 @@ class ContainerRunTest extends \Codeception\Test\Unit
     public function osAndExpectedShellCommandsDataSet()
     {
         return [
-            'macos' => [ 'Darwin', 'docker-compose run --rm wpbrowser run unit' ],
-            'linux' => [
-                'Linux',
-                implode(
-                    ' ',
-                    [
-                        'XDEBUG_REMOTE_HOST="$(ip -4 addr show docker0 | grep -Po \'inet \K[\d.]+\')"',
-                        'docker-compose run --rm -e XDEBUG_REMOTE_HOST="${XDEBUG_REMOTE_HOST}" wpbrowser run unit'
-                    ]
-                )
+            'macos'   => [
+                OperatingSystem::MAC,
+                'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal wpbrowser run unit'
+            ],
+            'linux'   => [
+                OperatingSystem::LINUX,
+                'docker-compose run --rm -e XDEBUG_REMOTE_HOST=172.17.0.1 wpbrowser run unit'
+            ],
+            'windows' => [
+                OperatingSystem::WINDOWS,
+                'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal wpbrowser run unit'
             ],
         ];
     }
@@ -57,12 +51,24 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_correctly_use_the_current_os_information($osFamily, $expectedShellCommand)
     {
-        $os    = $this->make(OperatingSystem::class, [ 'getFamily' => $osFamily ]);
-        $input = $this->makeEmpty(InputInterface::class);
+        $commandSupport = $this->makeEmpty(
+            CommandSupportInterface::class,
+            [
+                'getOperatingSystemFamily' => $osFamily,
+                'getCommandOutput'         => function ($class) use ($osFamily) {
+                    $this->assertEquals(ContainerHostAddress::class, $class);
 
-        $command = new ContainerRun('test', $os);
+                    return $osFamily === OperatingSystem::LINUX ?
+                        '172.17.0.1'
+                        : 'host.docker.internal';
+                }
+            ]
+        );
+        $input          = $this->makeEmpty(InputInterface::class);
 
-        $this->assertEquals($expectedShellCommand, implode(' ', $command->getShellCommand($input)));
+        $command = new ContainerRun('test', $commandSupport);
+
+        $this->assertEquals($expectedShellCommand, implode(' ', $command->getCommandLine($input)));
     }
 
     /**
@@ -72,8 +78,14 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_allow_specifying_the_container_name()
     {
-        $os    = $this->make(OperatingSystem::class, [ 'getFamily' => 'Darwin' ]);
-        $input = $this->makeEmpty(
+        $commandSupport = $this->makeEmpty(
+            CommandSupportInterface::class,
+            [
+                'getOperatingSystemFamily' => OperatingSystem::MAC,
+                'getCommandOutput'         => 'host.docker.internal'
+            ]
+        );
+        $input          = $this->makeEmpty(
             InputInterface::class,
             [
                 'hasOption' => static function ($name) {
@@ -89,11 +101,11 @@ class ContainerRunTest extends \Codeception\Test\Unit
             ]
         );
 
-        $command = new ContainerRun('test', $os);
+        $command = new ContainerRun('test', $commandSupport);
 
         $this->assertEquals(
-            'docker-compose run --rm test-container run unit',
-            implode(' ', $command->getShellCommand($input))
+            'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal test-container run unit',
+            implode(' ', $command->getCommandLine($input))
         );
     }
 
@@ -104,8 +116,14 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_allow_specifying_the_command_arguments_for_run()
     {
-        $os    = $this->make(OperatingSystem::class, [ 'getFamily' => 'Darwin' ]);
-        $input = $this->makeEmpty(
+        $commandSupport = $this->makeEmpty(
+            CommandSupportInterface::class,
+            [
+                'getOperatingSystemFamily' => OperatingSystem::MAC,
+                'getCommandOutput'         => 'host.docker.internal'
+            ]
+        );
+        $input          = $this->makeEmpty(
             InputInterface::class,
             [
                 'hasArgument' => static function ($name) {
@@ -128,10 +146,13 @@ class ContainerRunTest extends \Codeception\Test\Unit
             ]
         );
 
-        $command = new ContainerRun('test', $os);
+        $command = new ContainerRun('test', $commandSupport);
 
-        $shellCommand = $command->getShellCommand($input);
-        $this->assertEquals('docker-compose run --rm wpbrowser run some_suite', implode(' ', $shellCommand));
+        $shellCommand = $command->getCommandLine($input);
+        $this->assertEquals(
+            'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal wpbrowser run some_suite',
+            implode(' ', $shellCommand)
+        );
     }
 
     /**
@@ -141,8 +162,8 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_run_the_process_correctly()
     {
-        $expectedCommand = 'docker-compose run --rm test-runner run test_suite';
-        list( $os, $process, $input, $output ) = $this->setupCommandDependenciesToExpect(
+        $expectedCommand = 'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal test-runner run test_suite';
+        list( $commandSupport, $input, $output ) = $this->setupCommandDependenciesToExpect(
             $expectedCommand,
             [
                 'suite' => 'test_suite'
@@ -152,8 +173,55 @@ class ContainerRunTest extends \Codeception\Test\Unit
             ]
         );
 
-        $command = new ContainerRun('test', $os, $process);
+        $command = new ContainerRun('test', $commandSupport);
+
         $command->run($input, $output);
+    }
+
+    protected function setupCommandDependenciesToExpect(
+        $expectedCommand,
+        array $expectedArguments = [],
+        array $expectedOptions = [],
+        array $outputMethods = []
+    ) {
+        $commandSupport = $this->makeEmpty(
+            CommandSupportInterface::class,
+            [
+                'getOperatingSystemFamily' => OperatingSystem::MAC,
+                'getCommandOutput'         => 'host.docker.internal',
+                'getProcessForCommand'     => function ($command) use ($expectedCommand) {
+                    $this->assertEquals($expectedCommand, implode(' ', $command));
+
+                    return $this->makeEmpty(Process::class);
+                }
+            ]
+        );
+        $input          = $this->makeEmpty(
+            InputInterface::class,
+            [
+                'hasArgument' => function ($name) use ($expectedArguments) {
+                    return isset($expectedArguments[ $name ]);
+                },
+                'getArgument' => function ($name) use ($expectedArguments) {
+                    if (isset($expectedArguments[ $name ])) {
+                        return $expectedArguments[ $name ];
+                    }
+                    $this->fail("Unexpected getArgument call for {$name}.");
+                },
+                'hasOption'   => function ($name) use ($expectedOptions) {
+                    return isset($expectedOptions[ $name ]);
+                },
+                'getOption'   => function ($name) use ($expectedOptions) {
+                    if (isset($expectedOptions[ $name ])) {
+                        return $expectedOptions[ $name ];
+                    }
+                    $this->fail("Unexpected getOption call for {$name}.");
+                }
+            ]
+        );
+        $output         = $this->makeEmpty(OutputInterface::class, $outputMethods);
+
+        return [ $commandSupport, $input, $output ];
     }
 
     /**
@@ -190,7 +258,7 @@ class ContainerRunTest extends \Codeception\Test\Unit
     public function verbosityLevelsAndCounts()
     {
         return [
-            'normal'      => [ OutputInterface::VERBOSITY_NORMAL, '' ],
+            'normal'  => [ OutputInterface::VERBOSITY_NORMAL, '' ],
             '-vv'     => [ OutputInterface::VERBOSITY_VERBOSE, ' -vv' ],
             '-vvv'    => [ OutputInterface::VERBOSITY_VERY_VERBOSE, ' -vvv' ],
             '-q'      => [ OutputInterface::VERBOSITY_QUIET, ' -q' ],
@@ -206,15 +274,16 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_pass_verbosity_down_to_codecept_command($verbosityLevel, $expectedVerbosityOption)
     {
-        $expectedCommand = "docker-compose run --rm wpbrowser run unit{$expectedVerbosityOption}";
-        list( $os, $process, $input, $output ) = $this->setupCommandDependenciesToExpect(
+        $expectedCommand = 'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal wpbrowser run unit'
+                           . $expectedVerbosityOption;
+        list( $commandSupport, $input, $output ) = $this->setupCommandDependenciesToExpect(
             $expectedCommand,
             [],
             [],
             [ 'getVerbosity' => $verbosityLevel ]
         );
 
-        $command = new ContainerRun('test', $os, $process);
+        $command = new ContainerRun('test', $commandSupport);
         $command->run($input, $output);
     }
 
@@ -225,58 +294,15 @@ class ContainerRunTest extends \Codeception\Test\Unit
      */
     public function should_run_with_correct_defaults()
     {
-        $expectedCommand = "docker-compose run --rm wpbrowser run unit";
-        list( $os, $process, $input, $output ) = $this->setupCommandDependenciesToExpect($expectedCommand, [
-            'suite'=>  'unit'
-        ]);
+        $expectedCommand = 'docker-compose run --rm -e XDEBUG_REMOTE_HOST=host.docker.internal wpbrowser run unit';
+        list( $commandSupport, $input, $output ) = $this->setupCommandDependenciesToExpect(
+            $expectedCommand,
+            [
+                'suite' => 'unit'
+            ]
+        );
 
-        $command = new ContainerRun('test', $os, $process);
+        $command = new ContainerRun('test', $commandSupport);
         $command->run($input, $output);
-    }
-
-    protected function setupCommandDependenciesToExpect(
-        $expectedCommand,
-        array $expectedArguments = [],
-        array $expectedOptions = [],
-        array $outputMethods = []
-    ) {
-        $os          = $this->make(OperatingSystem::class, [ 'getFamily' => 'Darwin' ]);
-        $mockProcess = $this->makeEmpty(SymfonyProcess::class);
-        $process     = $this->make(
-            Process::class,
-            [
-                'forCommand' => function ($command, $cwd = null) use ($mockProcess, $expectedCommand) {
-                    $this->assertEquals($expectedCommand, implode(' ', $command));
-
-                    return $mockProcess;
-                }
-            ]
-        );
-        $input       = $this->makeEmpty(
-            InputInterface::class,
-            [
-                'hasArgument' => function ($name) use ($expectedArguments) {
-                    return isset($expectedArguments[ $name ]);
-                },
-                'getArgument' => function ($name) use ($expectedArguments) {
-                    if (isset($expectedArguments[ $name ])) {
-                        return $expectedArguments[ $name ];
-                    }
-                    $this->fail("Unexpected getArgument call for {$name}.");
-                },
-                'hasOption'   => function ($name) use ($expectedOptions) {
-                    return isset($expectedOptions[ $name ]);
-                },
-                'getOption'   => function ($name) use ($expectedOptions) {
-                    if (isset($expectedOptions[ $name ])) {
-                        return $expectedOptions[ $name ];
-                    }
-                    $this->fail("Unexpected getOption call for {$name}.");
-                }
-            ]
-        );
-        $output      = $this->makeEmpty(OutputInterface::class, $outputMethods);
-
-        return [ $os, $process, $input, $output ];
     }
 }

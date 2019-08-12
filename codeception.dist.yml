@@ -37,4 +37,5 @@ extensions:
         - "Codeception\\Command\\GenerateWPCanonical"
         - "Codeception\\Command\\GenerateWPXMLRPC"
         - "Codeception\\Command\\ContainerRun"
+        - "Codeception\\Command\\ContainerHostAddress"
 
