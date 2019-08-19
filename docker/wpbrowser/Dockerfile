@@ -38,7 +38,7 @@ LABEL maintainer="luca@theaveragedev.com"
 # Install XDebug extension.
 RUN pecl install xdebug
 
-# Create the /projec directory and change to it.
+# Create the /project directory and change to it.
 WORKDIR /project
 
 # Create an executable wrapper to execute the project vendor/bin/codecept binary appending command arguments to it.
