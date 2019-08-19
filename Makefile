@@ -30,7 +30,11 @@ PROJECT := $(shell basename ${CURDIR})
 	ci_script \
 	pre_commit \
 	require_codeception_2.5 \
-	require_codeception_3
+	require_codeception_3 \
+	test_parallel_execution \
+	pll_test \
+	pll_w_failures \
+	pll_docker_builds
 
 define wp_config_extra
 if ( filter_has_var( INPUT_SERVER, 'HTTP_HOST' ) ) {
@@ -274,3 +278,34 @@ require_codeception_2.5:
 require_codeception_3:
 	rm -rf composer.lock vendor/codeception vendor/phpunit vendor/sebastian \
 		&& composer require codeception/codeception:^3.0
+
+# Define the list of scripts to run
+SCRIPTS = foo baz bar
+
+# Generate the targets from the list of scripts.
+targets = $(addprefix php_script_, $(SCRIPTS))
+
+# Define a target in charge of running the generated targets.
+pll: $(targets)
+
+# Finally generate the targets.
+$(targets): php_script_%:
+	@php -r '$$i=0; while( $$i<5 ){ echo "PHP Script $@, run " . $$i++ . PHP_EOL; sleep( 1 / random_int( 1,10 ) ); }'
+
+targets_w_failures = $(addprefix failing_php_script_, $(SCRIPTS))
+
+$(targets_w_failures): failing_php_script_%:
+	@php -r '$$i=0; while( $$i<5 ){ echo "PHP Script $@, run " . $$i++ . PHP_EOL; $$r = random_int(1,10); if($$r<3){exit(1);} sleep( 1 / $$r ); } echo "PHP Script $@ completed." . PHP_EOL;'
+
+pll_w_failures: $(targets_w_failures)
+
+RUNS = 1 2 3
+docker_runs = $(addprefix run_, $(RUNS))
+
+$(docker_runs): run_%:
+	@docker-compose run --rm wpbrowser run test_suite -f -q --no-rebuild
+
+build_test_container:
+	@docker-compose build
+
+pll_docker_builds: $(docker_runs)

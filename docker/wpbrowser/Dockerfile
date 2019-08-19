@@ -4,6 +4,7 @@ ARG BUILD_PHP_VERSION=7.3
 # Allow for the customization of other PHP parameters.
 ARG BUILD_PHP_TIMEZONE=UTC
 ARG BUILD_PHP_IDEKEY=PHPSTORM
+ARG BUILD_XDEBUG_ENABLE=1
 
 # Build from the php-cli image based on Debian Buster.
 FROM php:${BUILD_PHP_VERSION}-cli-buster
@@ -37,16 +38,6 @@ LABEL maintainer="luca@theaveragedev.com"
 # Install XDebug extension.
 RUN pecl install xdebug
 
-# Set some ini values for PHP.
-# Among them configure the XDebug extension.
-RUN echo "date.timezone = ${BUILD_PHP_TIMEZONE}\n\
-\n\
-[xdebug]\n\
-zend_extension=xdebug.so\n\
-xdebug.idekey=${BUILD_PHP_IDEKEY}\n\
-xdebug.remote_enable=1\n\
-" >> /usr/local/etc/php/conf.d/99-overrides.ini
-
 # Create the /projec directory and change to it.
 WORKDIR /project
 
@@ -59,3 +50,16 @@ vendor/bin/codecept $@\n' \
 
 # By default run the wrapper when the container runs.
 ENTRYPOINT ["/usr/local/bin/codecept"]
+
+# At the end to leverage Docker build cache.
+COPY . /project
+
+# Set some ini values for PHP.
+# Among them configure the XDebug extension.
+RUN echo "date.timezone = ${BUILD_PHP_TIMEZONE}\n\
+\n\
+[xdebug]\n\
+zend_extension=xdebug.so\n\
+xdebug.idekey=${BUILD_PHP_IDEKEY}\n\
+xdebug.remote_enable=${BUILD_XDEBUG_ENABLE}\n\
+" >> /usr/local/etc/php/conf.d/99-overrides.ini

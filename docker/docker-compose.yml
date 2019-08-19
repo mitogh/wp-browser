@@ -53,19 +53,3 @@ services:
       - wp
     environment:
       - wp_TCP=tcp://wp:80
-
-  codecept:
-    build:
-      context: ./codecept
-      dockerfile: Dockerfile
-      args:
-        - BUILD_PHP_VERSION=${TEST_PHP_VERSION:-7.3}
-    volumes:
-      - ./../:/project
-    depends_on:
-      - db_waiter
-      - wp_waiter
-    links:
-      - db
-      - wp
-      - chromedriver

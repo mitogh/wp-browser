@@ -5,14 +5,14 @@ services:
   wpbrowser:
     # Instead of using a pre-built image, let's build it from the file.
     build:
-      context: ./docker/wpbrowser
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/wpbrowser/Dockerfile
       args:
         # By default use PHP 7.3 but allow overriding the version.
-        - BUILD_PHP_VERSION=${TEST_PHP_VERSION:-7.3}
-    volumes:
-      # Bind the project files into the /project directory.
-      - ./:/project
+        - BUILD_PHP_VERSION=${BUILD_PHP_VERSION:-7.3}
+        - BUILD_PHP_TIMEZONE=${BUILD_PHP_TIMEZONE:-UTC}
+        - BUILD_PHP_IDEKEY=${BUILD_PHP_IDEKEY:-PHPSTORM}
+        - BUILD_XDEBUG_ENABLE=${BUILD_XDEBUG_ENABLE:-1}
     environment:
       # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
       # Build systems are usually Linux-based.
