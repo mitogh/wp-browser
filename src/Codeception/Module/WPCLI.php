@@ -59,6 +59,7 @@ class WPCLI extends Module
     protected $config = [
         'throw' => true,
         'timeout' => 60,
+        'allowRoot' => true,
     ];
 
     /**
@@ -231,6 +232,10 @@ class WPCLI extends Module
         $commonOptions = [
             'path' => escapeshellarg($this->config['path']),
         ];
+
+        if (! empty($this->config['allowRoot'])) {
+            $commonOptions['allow-root'] = true;
+        }
 
         $lineOptions = [];
 

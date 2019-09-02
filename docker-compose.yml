@@ -2,17 +2,112 @@ version: '3.2'
 
 services:
 
-  wpbrowser:
+  chromedriver:
+    image: selenium/standalone-chrome:3.141.59-oxygen
+    depends_on:
+      - waiter
+    links:
+      - "wp:wp.test"
+      - "wp:test1.wp.test"
+      - "wp:test2.wp.test"
+
+  db:
+    image: mariadb:latest
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordrpess
+      MYSQL_PASSWORD: wordpress
+    command: mysqld --debug-no-sync
+
+  wp:
+    build:
+      context: .
+      dockerfile: docker/wordpress/Dockerfile
+    image: ${COMPOSE_PROJECT_NAME:-wpbrowser}_wp:latest
+    depends_on:
+      - db_waiter
+    links:
+      - db
+    environment:
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: ""
+    healthcheck:
+      test: ["CMD","curl","http://localhost"]
+      interval: 1s
+      timeout: 20s
+      retries: 20
+
+  waiter:
+    image: waisbrot/wait
+    depends_on:
+      - db
+      - wp
+    environment:
+      - TARGETS=db:3306,wp:80
+
+  db_waiter:
+    image: martin/wait
+    depends_on:
+      - db
+    environment:
+      - db_TCP=tcp://db:3306
+
+  wp_waiter:
+    image: martin/wait
+    depends_on:
+      - wp
+    environment:
+      - wp_TCP=tcp://wp:80
+
+  test_runner:
     # Instead of using a pre-built image, let's build it from the file.
     build:
       context: .
-      dockerfile: docker/wpbrowser/Dockerfile
+      dockerfile: docker/test_runner/Dockerfile
       args:
         # By default use PHP 7.3 but allow overriding the version.
-        - BUILD_PHP_VERSION=${BUILD_PHP_VERSION:-7.3}
-        - BUILD_PHP_TIMEZONE=${BUILD_PHP_TIMEZONE:-UTC}
-        - BUILD_PHP_IDEKEY=${BUILD_PHP_IDEKEY:-PHPSTORM}
-        - BUILD_XDEBUG_ENABLE=${BUILD_XDEBUG_ENABLE:-1}
+        BUILD_PHP_VERSION: ${BUILD_PHP_VERSION:-7.3}
+        BUILD_PHP_TIMEZONE: ${BUILD_PHP_TIMEZONE:-UTC}
+        BUILD_PHP_IDEKEY: ${BUILD_PHP_IDEKEY:-PHPSTORM}
+        BUILD_XDEBUG_ENABLE: ${BUILD_XDEBUG_ENABLE:-1}
+    image: wpbrowser_test_runner:latest
+    environment:
+      # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
+      # Build systems are usually Linux-based.
+      # Use default port, 9000, by default.
+      XDEBUG_CONFIG: "remote_host=${XDEBUG_REMOTE_HOST:-host.docker.internal} remote_port=${XDEBUG_REMOTE_PORT:-9000}"
+      # I use PHPStorm as IDE and this makes the handshake easier.
+      PHP_IDE_CONFIG: "serverName=wp.test"
+
+  wp_test_runner:
+    image: wpbrowser_test_runner:latest
+    depends_on:
+      - wp_waiter
+      - db_waiter
+    links:
+      - db
+      - wp
+    environment:
+      # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
+      # Build systems are usually Linux-based.
+      # Use default port, 9000, by default.
+      XDEBUG_CONFIG: "remote_host=${XDEBUG_REMOTE_HOST:-host.docker.internal} remote_port=${XDEBUG_REMOTE_PORT:-9000}"
+      # I use PHPStorm as IDE and this makes the handshake easier.
+      PHP_IDE_CONFIG: "serverName=wp.test"
+
+  web_test_runner:
+    image: wpbrowser_test_runner:latest
+    depends_on:
+      - wp_waiter
+      - db_waiter
+      - chromedriver
+    links:
+      - db
+      - wp
+      - chromedriver
     environment:
       # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
       # Build systems are usually Linux-based.

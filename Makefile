@@ -279,33 +279,98 @@ require_codeception_3:
 	rm -rf composer.lock vendor/codeception vendor/phpunit vendor/sebastian \
 		&& composer require codeception/codeception:^3.0
 
-# Define the list of scripts to run
-SCRIPTS = foo baz bar
 
-# Generate the targets from the list of scripts.
-targets = $(addprefix php_script_, $(SCRIPTS))
+build_test_containers:
+	docker-compose build --build-arg BUILD_XDEBUG_ENABLE=0 test_runner
 
-# Define a target in charge of running the generated targets.
-pll: $(targets)
+build_test_containers_w_xdebug:
+	docker-compose build --build-arg BUILD_XDEBUG_ENABLE=1 test_runner
 
-# Finally generate the targets.
-$(targets): php_script_%:
-	@php -r '$$i=0; while( $$i<5 ){ echo "PHP Script $@, run " . $$i++ . PHP_EOL; sleep( 1 / random_int( 1,10 ) ); }'
+build_wordpress_container:
+	docker-compose build wp
 
-targets_w_failures = $(addprefix failing_php_script_, $(SCRIPTS))
+wordpress_setup:
+	# Stop and remove any previous database instance.
+	if [[ "$$(docker ps | grep wp_install_db)" != '' ]]; then docker stop wp_install_db; fi
+	# Spin up a MariaDB container to install, configure and generate the WordPress dump.
+	docker run \
+			-p 4406:3306 \
+			--name wp_install_db \
+			-e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
+			-e MYSQL_DATABASE=wordpress \
+			--rm -d \
+			mariadb
+	# Remove any previuosly installed version and prepare t
+	if [ -d vendor/wordpress/wordpress ]; then \
+		rm -rf vendor/wordpress/wordpress && mkdir -p vendor/wordpress/wordpress; \
+	fi
+	# Download WordPress in the vendor folder.
+	vendor/bin/wp core download --path=${CURDIR}/vendor/wordpress/wordpress
+	# Wait for the db container to come up.
+	docker run --link wp_install_db:db -e TARGETS=db:3306 waisbrot/wait
+	# Create a configuration file; temporarily pointing to the database above.
+	vendor/bin/wp config create \
+		--path=${CURDIR}/vendor/wordpress/wordpress \
+		--dbname=wordpress \
+		--dbuser=root \
+		--dbpass= \
+		--dbhost=127.0.0.1:4406 \
+		--dbprefix=wp_ \
+		--force
+	# Reset the database.
+	vendor/bin/wp db reset --yes --path=${CURDIR}/vendor/wordpress/wordpress
+	# Install WordPress in multisite mode.
+	vendor/bin/wp core multisite-install \
+		--path=${CURDIR}/vendor/wordpress/wordpress \
+		--url=http://wp \
+		--base=/ \
+		--subdomains \
+		--title=Test \
+		--admin_user=admin \
+		--admin_password=admin \
+		--admin_email=admin@wp.test \
+		--skip-email
+	# Copy over the multisite htaccess file.
+	cp docker/wordpress/htaccess vendor/wordpress/wordpress/.htaccess
+	# Copy over wp-cli configuration file.
+	cp docker/wordpress/wp-cli.yml ${CURDIR}/vendor/wordpress/wordpress/wp-cli.yml
+	# Create sub-domain 1.
+	vendor/bin/wp site create --path=${CURDIR}/vendor/wordpress/wordpress --slug=test1 --title="Test 1"
+	# Create sub-domain 2.
+	vendor/bin/wp site create --path=${CURDIR}/vendor/wordpress/wordpress --slug=test2 --title="Test 2"
+	# Update WordPress database to avoid prompts.
+	vendor/bin/wp core update-db --network --path=${CURDIR}/vendor/wordpress/wordpress
+	# Empty the main site of all content.
+	vendor/bin/wp site empty --yes --uploads --path=${CURDIR}/vendor/wordpress/wordpress
+	# Make sure everyone can read/write/execute the tests/_data folder and the WordPress folder.
+	# This is a cheap work-around for how users work differently on Linux and Mac/Windows version of Docker.
+	# This is not ideal, it's a security kludge, but it's fine in testing.
+	sudo chmod -R 777 tests/_data
+	sudo chmod -R 777 vendor/wordpress/wordpress
+	# Export a dump of the just installed database to the _data folder of the project.
+	vendor/bin/wp db export ${CURDIR}/tests/_data/dump.sql --path=${CURDIR}/vendor/wordpress/wordpress
+	# Kill the installation database.
+	docker stop wp_install_db
+	# Copy in the configuration file overriding the one used to set up the installation.
+	cp docker/wordpress/wp-config.php vendor/wordpress/wordpress/wp-config.php
 
-$(targets_w_failures): failing_php_script_%:
-	@php -r '$$i=0; while( $$i<5 ){ echo "PHP Script $@, run " . $$i++ . PHP_EOL; $$r = random_int(1,10); if($$r<3){exit(1);} sleep( 1 / $$r ); } echo "PHP Script $@ completed." . PHP_EOL;'
+wordpress_healthcheck:
+	docker run --rm --network container:${PROJECT}_wp_1 alpine ping -c 1 wp
 
-pll_w_failures: $(targets_w_failures)
+chromedriver_healthcheck:
+	docker-compose run --rm chromedriver bash -c 'curl -I http://wp.test/ && curl -I http://test1.wp.test/ && curl -I http://test2.wp.test/'
 
-RUNS = 1 2 3
-docker_runs = $(addprefix run_, $(RUNS))
+unit_suites = unit
+functional_suites = climodule
+web_suites = webdriver
 
-$(docker_runs): run_%:
-	@docker-compose run --rm wpbrowser run test_suite -f -q --no-rebuild
+$(unit_suites): %:
+	@docker-compose run --rm test_runner run $@ -f --ext DotReporter
 
-build_test_container:
-	@docker-compose build
+$(functional_suites): %:
+	@docker-compose run --rm wp_test_runner run $@ -f --ext DotReporter
 
-pll_docker_builds: $(docker_runs)
+$(web_suites): %:
+	@docker-compose run --rm web_test_runner run $@ -f --ext DotReporter
+
+pll_tests: $(unit_suites) $(functional_suites) $(web_suites)
