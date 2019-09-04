@@ -2,7 +2,6 @@
 
 namespace Codeception\Module;
 
-use BaconStringUtils\Slugifier;
 use Codeception\Exception\ModuleConfigException;
 use Codeception\Exception\ModuleException;
 use Codeception\Lib\ModuleContainer;
@@ -19,6 +18,7 @@ use tad\WPBrowser\Generators\Tables;
 use tad\WPBrowser\Generators\User;
 use tad\WPBrowser\Generators\WpPassword;
 use tad\WPBrowser\Module\Support\DbDump;
+use function tad\WPBrowser\slug;
 
 /**
  * An extension of Codeception Db class to add WordPress database specific
@@ -762,7 +762,7 @@ class WPDb extends Db
      */
     public function haveTermInDatabase($name, $taxonomy, array $overrides = [])
     {
-        $termDefaults = ['slug' => (new Slugifier())->slugify($name), 'term_group' => 0];
+        $termDefaults = ['slug' => slug($name), 'term_group' => 0];
 
         $hasMeta = !empty($overrides['meta']);
         $meta = [];
@@ -3179,7 +3179,7 @@ class WPDb extends Db
         $fs = $this->getWpFilesystemModule();
 
         $pathInfo = pathinfo($file);
-        $slug = str_slug($pathInfo['filename']);
+        $slug = slug($pathInfo['filename']);
 
         $uploadedFilePath = $fs->writeToUploadedFile($pathInfo['basename'], file_get_contents($file), $date);
         $uploadUrl = $this->grabSiteUrl(str_replace($fs->getWpRootFolder(), '', $uploadedFilePath));
