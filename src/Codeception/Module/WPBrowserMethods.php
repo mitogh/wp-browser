@@ -42,7 +42,7 @@ trait WPBrowserMethods
      */
     public function loginAsAdmin()
     {
-        return $this->loginAs($this->config['adminUsername'], $this->config['adminPassword']);
+        return $this->loginAs($this->config('adminUsername'), $this->config('adminPassword'));
     }
 
     /**
@@ -439,8 +439,13 @@ trait WPBrowserMethods
      *
      * @return string The login URL.
      */
-    private function getLoginUrl()
+    protected function getLoginUrl()
     {
         return $this->loginUrl;
+    }
+
+    protected function config($key)
+    {
+        return !empty($this->{$key})  ? $this->{$key} : '';
     }
 }

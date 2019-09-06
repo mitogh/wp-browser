@@ -4,7 +4,6 @@ namespace Codeception\Lib\Generator;
 
 use Codeception\Configuration;
 use Codeception\Lib\Generator\Shared\Classname;
-use Codeception\Module\Queue;
 use Codeception\TestCase\WPTestCase;
 use Codeception\Util\Shared\Namespaces;
 use Codeception\Util\Template;

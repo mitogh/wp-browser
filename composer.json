@@ -41,7 +41,8 @@
     "victorjonsson/markdowndocs": "dev-master",
     "phpstan/phpstan": "^0.11.15",
     "phpstan/phpstan-shim": "^0.11.15",
-    "szepeviktor/phpstan-wordpress": "^0.2.0"
+    "szepeviktor/phpstan-wordpress": "^0.2.0",
+    "phan/phan": "^2.2"
   },
   "autoload": {
     "psr-4": {
