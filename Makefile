@@ -308,7 +308,7 @@ wordpress_setup:
 			-e MYSQL_DATABASE=wordpress \
 			--rm -d \
 			mariadb
-	# Remove any previuosly installed version and prepare t
+	# Remove any previuosly installed version and prepare the WordPress directory.
 	if [ -d vendor/wordpress/wordpress ]; then \
 		rm -rf vendor/wordpress/wordpress && mkdir -p vendor/wordpress/wordpress; \
 	fi
