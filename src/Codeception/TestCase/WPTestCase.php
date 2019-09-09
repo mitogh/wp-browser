@@ -2,7 +2,10 @@
 namespace Codeception\TestCase;
 
 // phpcs:disable
+use Codeception\Exception\ModuleException;
+use Codeception\Module\WPQueries;
 use Codeception\Test\Unit;
+use tad\WPBrowser\Compat\Compatibility;
 
 if (!class_exists('WP_UnitTest_Factory')) {
     require_once dirname(dirname(dirname(__FILE__))) . '/includes/factory.php';
@@ -37,6 +40,13 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
     protected $caught_doing_it_wrong = array();
 
     protected $backupGlobals = false;
+
+    /**
+     * A buffer property, used to accumulate directories during delete operations.
+     *
+     * @var array
+     */
+    protected $matched_dirs;
 
     public static function _setUpBeforeClass()
     {
@@ -211,10 +221,9 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
          * Check on what methods `\Codeception\Test\Unit` provides to call the correct one depending on the PHPUnit and
          * Codeception versions.
          */
-        if (method_exists(Unit::class, '_setUp')) {
-            Unit::_setup();
-        } elseif (method_exists(Unit::class, 'setUp')) {
-            Unit::setUp();
+        $unitSetupMethod = Compatibility::setupMethodFor(Unit::class);
+        if (method_exists(Unit::class, $unitSetupMethod)) {
+            Unit::{$unitSetupMethod}();
         }
     }
 
@@ -298,6 +307,7 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
      */
     protected function reset_post_types()
     {
+        /** @var \WP_Post_Type $pt */
         foreach (get_post_types(array(), 'objects') as $pt) {
             if (empty($pt->tests_no_auto_unregister)) {
                 _unregister_post_type($pt->name);
@@ -497,6 +507,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
             $message = '0';
         }
 
+        $message = is_string($message) ? $message : 'Message is not a string';
+
         throw new \WPDieException($message);
     }
 
@@ -516,10 +528,7 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
     /**
      * Declare an expected `_doing_it_wrong()` call from within a test.
      *
-     * @since 4.2.0
-     *
-     * @param string $deprecated Name of the function, method, or class that appears in the first argument of the
-     *                           source `_doing_it_wrong()` call.
+     * @param string $doing_it_wrong `_doing_it_wrong()` call from the test.
      */
     public function setExpectedIncorrectUsage($doing_it_wrong)
     {
@@ -626,7 +635,10 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
                 unset($GLOBALS[$v]);
             }
         }
-        $parts = parse_url($url);
+
+        // Let's cast to array if the URL is malformed to the point where `false` is returned.
+        $parts = parse_url($url) ?: [];
+
         if (isset($parts['scheme'])) {
             $req = isset($parts['path']) ? $parts['path'] : '';
             if (isset($parts['query'])) {
@@ -662,16 +674,6 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
     }
 
     /**
-     * Define constants after including files.
-     */
-    public function prepareTemplate(\Text_Template $template)
-    {
-        $template->setVar(array('constants' => ''));
-        $template->setVar(array('wp_constants' => \PHPUnit_Util_GlobalState::getConstantsAsString()));
-        parent::prepareTemplate($template);
-    }
-
-    /**
      * Returns the name of a temporary file
      */
     public function temp_filename()
@@ -684,11 +686,14 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
                 break;
             }
         }
+
         if (empty($tmp_dir)) {
             $tmp_dir = '/tmp';
         }
-        $tmp_dir = realpath($tmp_dir);
-        return tempnam($tmp_dir, 'wpunit');
+
+        $tmp_dir_realpath = realpath($tmp_dir);
+
+        return tempnam($tmp_dir_realpath ?: $tmp_dir, 'wpunit');
     }
 
     /**
@@ -698,9 +703,11 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
      * expected to be false. For example, assertQueryTrue('is_single', 'is_feed') means is_single()
      * and is_feed() must be true and everything else must be false to pass.
      *
-     * @param string $prop,... Any number of WP_Query properties that are expected to be true for the current request.
+     * @param string $prop The property to check.
+     *                                  request.
+     * @param array<int, mixed> $props An array of additional properties to check.
      */
-    public function assertQueryTrue(/* ... */)
+    public function assertQueryTrue($prop, ...$props)
     {
         global $wp_query;
         $all = array(
@@ -733,9 +740,10 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
             'is_trackback',
             'is_year',
         );
-        $true = func_get_args();
 
-        foreach ($true as $true_thing) {
+        $props = array_merge((array)$prop, ...$props);
+
+        foreach ($props as $true_thing) {
             $this->assertContains($true_thing, $all, "{$true_thing}() is not handled by assertQueryTrue().");
         }
 
@@ -743,27 +751,25 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
         $not_false = $not_true = array(); // properties that were not set to expected values
 
         foreach ($all as $query_thing) {
-            $result = is_callable($query_thing) ? call_user_func($query_thing) : $wp_query->$query_thing;
+            $result = is_callable($query_thing) ? $query_thing() : $wp_query->$query_thing;
 
-            if (in_array($query_thing, $true)) {
+            if (in_array($query_thing, $props, true)) {
                 if (!$result) {
-                    array_push($not_true, $query_thing);
+                    $not_true[] = $query_thing;
                     $passed = false;
                 }
-            } else {
-                if ($result) {
-                    array_push($not_false, $query_thing);
-                    $passed = false;
-                }
+            } elseif ($result) {
+                $not_false[] = $query_thing;
+                $passed = false;
             }
         }
 
         $message = '';
         if (count($not_true)) {
-            $message .= implode($not_true, ', ') . ' is expected to be true. ';
+            $message .= implode(', ', $not_true) . ' is expected to be true. ';
         }
         if (count($not_false)) {
-            $message .= implode($not_false, ', ') . ' is expected to be false.';
+            $message .= implode(', ', $not_false) . ' is expected to be false.';
         }
         $this->assertTrue($passed, $message);
     }
@@ -812,7 +818,14 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 
     public function scandir($dir)
     {
-        foreach (scandir($dir) as $path) {
+        $scandir = scandir($dir, SCANDIR_SORT_NONE);
+
+        if (false === $scandir) {
+            // And a Warning is generated.
+            return;
+        }
+
+        foreach ($scandir as $path) {
             if (0 !== strpos($path, '.') && is_dir($dir . '/' . $path)) {
                 $this->matched_dirs[] = $dir . '/' . $path;
                 $this->scandir($dir . '/' . $path);
@@ -843,7 +856,13 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
 
         // Save the data
         $id = wp_insert_attachment($attachment, $upload['file'], $parent_post_id);
+
+        if (!is_int($id)) {
+            throw new \RuntimeException('Attachment insert failed.');
+        }
+
         wp_update_attachment_metadata($id, wp_generate_attachment_metadata($id, $upload['file']));
+
         return $id;
     }
 
@@ -893,7 +912,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
      */
     public function knownWPBug($ticket_id)
     {
-        if (WP_TESTS_FORCE_KNOWN_BUGS || in_array($ticket_id, self::$forced_tickets)) {
+        if ((defined('WP_TESTS_FORCE_KNOWN_BUGS') && WP_TESTS_FORCE_KNOWN_BUGS)
+        || in_array($ticket_id, self::$forced_tickets, true)) {
             return;
         }
         if (!\TracTickets::isTracTicketClosed('https://core.trac.wordpress.org', $ticket_id)) {
@@ -906,7 +926,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
      */
     public function knownUTBug($ticket_id)
     {
-        if (WP_TESTS_FORCE_KNOWN_BUGS || in_array('UT' . $ticket_id, self::$forced_tickets)) {
+        if ((defined('WP_TESTS_FORCE_KNOWN_BUGS')||WP_TESTS_FORCE_KNOWN_BUGS)
+        || in_array('UT' . $ticket_id, self::$forced_tickets, true)) {
             return;
         }
         if (!\TracTickets::isTracTicketClosed('https://unit-tests.trac.wordpress.org', $ticket_id)) {
@@ -919,7 +940,8 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
      */
     public function knownPluginBug($ticket_id)
     {
-        if (WP_TESTS_FORCE_KNOWN_BUGS || in_array('Plugin' . $ticket_id, self::$forced_tickets)) {
+        if ((defined('WP_TESTS_FORCE_KNOWN_BUGS') && WP_TESTS_FORCE_KNOWN_BUGS)
+            || in_array('Plugin' . $ticket_id, self::$forced_tickets, true)) {
             return;
         }
         if (!\TracTickets::isTracTicketClosed('https://plugins.trac.wordpress.org', $ticket_id)) {
@@ -939,10 +961,15 @@ class WPTestCase extends \tad\WPBrowser\Compat\Codeception\Unit
     /**
      * Returns the WPQueries module instance.
      *
-     * @return \Codeception\Module\WPQueries
+     * @return WPQueries An instance of the queries module, if any.
+     *
+     * @throws ModuleException If the WPQueries module is not loaded in the suite.
      */
     public function queries()
     {
-        return $this->getModule('WPQueries');
+        /** @var WPQueries $queries */
+        $queries = $this->getModule('WPQueries');
+
+        return $queries;
     }
 }

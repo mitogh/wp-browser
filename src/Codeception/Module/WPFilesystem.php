@@ -8,6 +8,7 @@ use Codeception\Exception\ModuleException;
 use Codeception\TestInterface;
 use PHPUnit\Framework\Assert;
 use tad\WPBrowser\Filesystem\Utils;
+use function tad\WPBrowser\buildDate;
 
 /**
  * Class WPFilesystem
@@ -172,6 +173,8 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param string $path The path, relative to the site uploads folder.
+     *
+     * @throws \Exception If the path is a date string and is not parsable by the `strtotime` function.
      */
     public function amInUploadsPath($path = null)
     {
@@ -183,13 +186,13 @@ class WPFilesystem extends Filesystem
                 $path = $this->config['uploads'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path);
             } else {
                 // time based?
-                $timestamp = is_numeric($path) ? $path : strtotime($path);
+                $date = buildDate($path);
                 $path = implode(
                     DIRECTORY_SEPARATOR,
                     [
                         $this->config['uploads'],
-                        date('Y', $timestamp),
-                        date('m', $timestamp),
+                        $date->format('Y'),
+                        $date->format('m'),
                     ]
                 );
             }
@@ -231,7 +234,7 @@ class WPFilesystem extends Filesystem
      * ```
      *
      * @param string $file The file path, relative to the uploads folder.
-     * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     * @param mixed $date A string compatible with `strtotime`, a Unix timestamp or a Date object.
      *
      * @return string The absolute path to an uploaded file.
      */
@@ -254,21 +257,23 @@ class WPFilesystem extends Filesystem
         return $path;
     }
 
+    /** @noinspection PhpDocMissingThrowsInspection */
     /**
      * Builds the additional path fragment depending on the date.
      *
-     * @param string|int $date A string compatible with `strtotime` or a Unix timestamp.
+     * @param mixed $date A string compatible with `strtotime`, a Unix timestamp or a Date object.
      *
      * @return string The relative path with the date path appended, if needed.
      */
     protected function buildDateFrag($date)
     {
-        $timestamp = is_numeric($date) ? $date : strtotime($date);
-        $Y = date('Y', $timestamp);
-        $m = date('m', $timestamp);
-        $dateFrag = $Y . DIRECTORY_SEPARATOR . $m;
+        try {
+            $date = buildDate($date);
+        } catch (\Exception $e) {
+            return $date;
+        }
 
-        return $dateFrag;
+        return $date->format('Y') . DIRECTORY_SEPARATOR . $date->format('m');
     }
 
     /**
@@ -451,7 +456,7 @@ class WPFilesystem extends Filesystem
      *
      * @return string The absolute path to the destination file.
      *
-     * @throws \Codeception\Exception\ModuleException If the destination folder could not be created or the destination
+     * @throws ModuleException If the destination folder could not be created or the destination
      *                                                file could not be written.
      */
     public function writeToUploadedFile($filename, $data, $date = null)
@@ -966,7 +971,7 @@ class WPFilesystem extends Filesystem
      * @param string $path The path to the file to create, relative to the plugins folder.
      * @param string $code The content of the plugin file with or without the opening PHP tag.
      *
-     * @throws \Codeception\Exception\ModuleException If the plugin folder and/or files could not be created.
+     * @throws ModuleException If the plugin folder and/or files could not be created.
      *
      */
     public function havePlugin($path, $code)
@@ -1021,7 +1026,7 @@ PHP;
      * @param string $filename The path to the file to create, relative to the plugins root folder.
      * @param string $code     The content of the plugin file with or without the opening PHP tag.
      *
-     * @throws \Codeception\Exception\ModuleException If the mu-plugin folder and/or files could not be created.
+     * @throws ModuleException If the mu-plugin folder and/or files could not be created.
      */
     public function haveMuPlugin($filename, $code)
     {
@@ -1083,13 +1088,10 @@ PHP;
      * @param string $indexFileCode     The content of the theme index.php file with or without the opening PHP tag.
      * @param string $functionsFileCode The content of the theme functions.php file with or without the opening PHP tag.
      *
-     * @throws \Codeception\Exception\ModuleException If the mu-plugin folder and/or files could not be created.
+     * @throws ModuleException If the mu-plugin folder and/or files could not be created.
      */
-    public function haveTheme(
-        $folder,
-        $indexFileCode,
-        $functionsFileCode = null
-    ) {
+    public function haveTheme($folder, $indexFileCode, $functionsFileCode = '')
+    {
         $dir = $this->config['themes'] . Utils::untrailslashit(Utils::unleadslashit($folder));
         $styleFile = $dir . DIRECTORY_SEPARATOR . 'style.css';
         $indexFile = $dir . DIRECTORY_SEPARATOR . 'index.php';
@@ -1174,10 +1176,13 @@ CSS;
      * $testLastMonthLogs = $I->getBlogUploadsPath($blogId, '/logs', '-1 month');
      * ```
      *
-     * @param int    $blogId The blog ID to get the path for.
-     * @param string $file   The path, relatitve to the blog uploads folder, to the file or folder.
-     * @param null   $date   The date that should be used to build the uploads sub-folders in the year/month format;
-     *                       a UNIX timestamp or a string supported by the `strtotime` function; defaults to `now`.
+     * @param int                                      $blogId The blog ID to get the path for.
+     * @param string $file                                     The path, relatitve to the blog uploads folder, to the
+     *                                                         file or folder.
+     * @param null|string|\DateTime|\DateTimeImmutable $date   The date that should be used to build the uploads
+     *                                                         sub-folders in the year/month format; a UNIX timestamp or
+     *                                                         a string supported by the `strtotime` function; defaults
+     *                                                         to `now`.
      *
      * @return string The absolute path to a blog uploads folder or file.
      * @throws \Exception If the date is not a valid format.
@@ -1215,7 +1220,7 @@ CSS;
      *
      * @return string The absolute path to the created folder.
      *
-     * @throws \Codeception\Exception\ModuleException
+     * @throws ModuleException
      */
     public function makeUploadsDir($path)
     {
@@ -1257,7 +1262,8 @@ CSS;
     protected function removeOpeningPhpTag($code)
     {
         // Remove the opening PHP tag if present.
-        $code = preg_replace('/^\<\?php\\s*/', '', $code);
+        $code = preg_replace('/^\<\?php\\s*/', '', $code) ?: '';
+
         return $code;
     }
 }

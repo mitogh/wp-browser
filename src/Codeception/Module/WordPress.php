@@ -9,6 +9,7 @@ use Codeception\Lib\ModuleContainer;
 use Codeception\TestInterface;
 use tad\WPBrowser\Connector\WordPress as WordPressConnector;
 use tad\WPBrowser\Filesystem\Utils;
+use function tad\WPBrowser\parseUrl;
 
 /**
  * A module dedicated to functional testing using acceptance-like methods.
@@ -40,11 +41,6 @@ class WordPress extends Framework implements DependsOnModule
      * @var array
      */
     protected $config = ['adminPath' => '/wp-admin'];
-
-    /**
-     * @var string
-     */
-    protected $adminPath;
 
     /**
      * @var bool
@@ -93,11 +89,6 @@ EOF;
     protected $siteUrl;
 
     /**
-     * @var string
-     */
-    protected $loginUrl = '';
-
-    /**
      * @var string The string that will hold the response content after each request handling.
      */
     public $response = '';
@@ -107,7 +98,7 @@ EOF;
      *
      * @param \Codeception\Lib\ModuleContainer        $moduleContainer
      * @param array                                   $config
-     * @param \tad\WPBrowser\Connector\WordPress|null $client
+     * @param \tad\WPBrowser\Connector\WordPress $client
      *
      * @throws \Codeception\Exception\ModuleConfigException
      */
@@ -115,8 +106,8 @@ EOF;
     {
         parent::__construct($moduleContainer, $config);
         $this->ensureWpRoot();
-        $this->adminPath = $this->config['adminPath'];
-        $this->client    = $client;
+        $this->setAdminPath($this->config['adminPath']);
+        $this->client    = $client ?: new WordPressConnector();
     }
 
     private function ensureWpRoot()
@@ -140,13 +131,13 @@ EOF;
         /** @var WPDb $wpdb */
         $wpdb          = $this->getModule('WPDb');
         $this->siteUrl = $wpdb->grabSiteUrl();
-        $this->loginUrl = '/wp-login.php';
+        $this->setLoginUrl('/wp-login.php');
         $this->setupClient($wpdb->getSiteDomain());
     }
 
     private function setupClient($siteDomain)
     {
-        $this->client = $this->client ? $this->client : new WordPressConnector();
+        $this->client = isset($this->client) ? $this->client : new WordPressConnector();
         $this->client->setUrl($this->siteUrl);
         $this->client->setDomain($siteDomain);
         $this->client->setRootFolder($this->config['wpRootFolder']);
@@ -156,7 +147,9 @@ EOF;
     }
 
     /**
-     * @param $client
+     * Internal method to inject the client to use.
+     *
+     * @param  WordPressConnector $client The client object that should be used.
      */
     public function _setClient($client)
     {
@@ -222,7 +215,7 @@ EOF;
         if ($preparedPage === '/') {
             $preparedPage = 'index.php';
         }
-        $page         = $this->adminPath . '/' . $preparedPage;
+        $page         = $this->getAdminPath() . '/' . $preparedPage;
         return $this->amOnPage($page);
     }
 
@@ -257,12 +250,14 @@ EOF;
      * ```
      *
      * @param string $page The path to the page, relative to the the root URL.
+     *
+     * @return string The page path.
      */
     public function amOnPage($page)
     {
         $this->setRequestType($page);
 
-        $parts      = parse_url($page);
+        $parts      = parseUrl($page);
         $parameters = [];
         if (!empty($parts['query'])) {
             parse_str($parts['query'], $parameters);
@@ -277,7 +272,7 @@ EOF;
         $this->setCookie('wordpress_test_cookie', 'WP Cookie check');
         $this->_loadPage('GET', $page, $parameters);
 
-        return null;
+        return $page;
     }
 
     private function setRequestType($page)
@@ -291,7 +286,7 @@ EOF;
 
     private function isAdminPageRequest($page)
     {
-        return 0 === strpos($page, $this->adminPath);
+        return 0 === strpos($page, $this->getAdminPath());
     }
 
     /**
@@ -305,7 +300,9 @@ EOF;
     public function getInternalDomains()
     {
         $internalDomains   = [];
-        $internalDomains[] = '/^' . preg_quote(parse_url($this->siteUrl, PHP_URL_HOST), '/') . '$/';
+        $host = parse_url($this->siteUrl, PHP_URL_HOST) ?: 'localhost';
+        $internalDomains[] = '#^' . preg_quote($host, '#') . '$#';
+
         return $internalDomains;
     }
 
@@ -413,7 +410,7 @@ EOF;
      */
     public function loginAs($username, $password)
     {
-        $this->amOnPage($this->loginUrl);
+        $this->amOnPage($this->getLoginUrl());
         $this->submitForm('#loginform', [
         'log' =>$username,
         'pwd' => $password ,

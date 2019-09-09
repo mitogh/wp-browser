@@ -4,6 +4,7 @@ namespace Codeception\Lib\Generator;
 
 use Codeception\Configuration;
 use Codeception\Lib\Generator\Shared\Classname;
+use Codeception\Module\Queue;
 use Codeception\TestCase\WPTestCase;
 use Codeception\Util\Shared\Namespaces;
 use Codeception\Util\Template;
@@ -51,6 +52,7 @@ EOF;
 
     public function __construct($settings, $name, $baseClass)
     {
+        parent::__construct($settings);
         $this->settings = $settings;
         $this->name = $this->removeSuffix($name, 'Test');
         $this->baseClass = $baseClass;
@@ -61,10 +63,14 @@ EOF;
         $ns = $this->getNamespaceHeader($this->settings['namespace'] . '\\' . $this->name);
 
         $phpunitSeries = getenv('WPBROWSER_PHPUNIT_SERIES');
+
         if (empty($phpunitSeries) && class_exists(WPTestCase::class)) {
+            // Re-run the check after the auto-loading has autoloaded the file.
             $phpunitSeries = getenv('WPBROWSER_PHPUNIT_SERIES');
         }
-        $voidReturnType = version_compare($phpunitSeries, '8.0', '<') ?
+
+        /** @var string $phpunitSeries */
+        $voidReturnType = is_string($phpunitSeries) && version_compare($phpunitSeries, '8.0', '<') ?
             ''
             : ': void';
 
@@ -91,7 +97,7 @@ EOF;
             $propertyName = '';
         }
 
-        if (!isset($propertyName, $actor)) {
+        if (!isset($actor)) {
             return '';
         }
 

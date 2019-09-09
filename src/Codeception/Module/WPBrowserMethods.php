@@ -2,10 +2,31 @@
 
 namespace Codeception\Module;
 
+use Codeception\Exception\ModuleException;
 use function GuzzleHttp\Psr7\build_query;
 
 trait WPBrowserMethods
 {
+    /**
+     * The plugin screen absolute URL
+     *
+     * @var string
+     */
+    protected $pluginsPath;
+
+    /**
+     * The admin absolute URL.
+     *
+     * @var string
+     */
+    protected $adminPath;
+
+    /**
+     * The login screen absolute URL
+     *
+     * @var string
+     */
+    protected $loginUrl;
 
     /**
      * Login as the administrator user using the credentials specified in the module configuration.
@@ -51,8 +72,27 @@ trait WPBrowserMethods
         $this->submitForm('#loginform', $params, '#wp-submit');
     }
 
+    /**
+     * Initializes the module setting the properties values.
+     */
+    public function _initialize()
+    {
+        parent::_initialize();
+
+        $this->configBackCompat();
+
+        $adminPath         = $this->config['adminPath'];
+        $this->loginUrl    = str_replace('wp-admin', 'wp-login.php', $adminPath);
+        $this->adminPath   = rtrim($adminPath, '/');
+        $this->pluginsPath = $this->adminPath . '/plugins.php';
+    }
+
     protected function grabWordPressAuthCookie($pattern = null)
     {
+        if (! method_exists($this, 'grabCookiesWithPattern')) {
+            return null;
+        }
+
         $pattern = $pattern ? $pattern : '/^wordpress_[a-z0-9]{32}$/';
         $cookies = $this->grabCookiesWithPattern($pattern);
 
@@ -61,73 +101,14 @@ trait WPBrowserMethods
 
     protected function grabWordPressLoginCookie($pattern = null)
     {
+        if (! method_exists($this, 'grabCookiesWithPattern')) {
+            return null;
+        }
+
         $pattern = $pattern ? $pattern : '/^wordpress_logged_in_[a-z0-9]{32}$/';
         $cookies = $this->grabCookiesWithPattern($pattern);
 
         return empty($cookies) ? null : array_pop($cookies);
-    }
-
-    /**
-     * In the plugin administration screen activates one or more plugins clicking the "Activate" link.
-     *
-     * The method will **not** handle authentication and navigation to the plugins administration page.
-     *
-     * @example
-     * ```php
-     * // Activate a plugin.
-     * $I->loginAsAdmin();
-     * $I->amOnPluginsPage();
-     * $I->activatePlugin('hello-dolly');
-     * // Activate a list of plugins.
-     * $I->loginAsAdmin();
-     * $I->amOnPluginsPage();
-     * $I->activatePlugin(['hello-dolly','another-plugin']);
-     * ```
-     *
-     * @param  string|array $pluginSlug The plugin slug, like "hello-dolly" or a list of plugin slugs.
-     */
-    public function activatePlugin($pluginSlug)
-    {
-        $plugins = (array)$pluginSlug;
-        foreach ($plugins as $plugin) {
-            $option = '//*[@data-slug="' . $plugin . '"]/th/input';
-            $this->scrollTo($option, 0, -40);
-            $this->checkOption($option);
-        }
-        $this->scrollTo('select[name="action"]', 0, -40);
-        $this->selectOption('action', 'activate-selected');
-        $this->click("#doaction");
-    }
-
-    /**
-     * In the plugin administration screen deactivate a plugin clicking the "Deactivate" link.
-     *
-     * The method will **not** handle authentication and navigation to the plugins administration page.
-     *
-     * @example
-     * ```php
-     * // Deactivate one plugin.
-     * $I->loginAsAdmin();
-     * $I->amOnPluginsPage();
-     * $I->deactivatePlugin('hello-dolly');
-     * // Deactivate a list of plugins.
-     * $I->loginAsAdmin();
-     * $I->amOnPluginsPage();
-     * $I->deactivatePlugin(['hello-dolly', 'my-plugin']);
-     * ```
-     *
-     * @param  string|array $pluginSlug The plugin slug, like "hello-dolly", or a list of plugin slugs.
-     */
-    public function deactivatePlugin($pluginSlug)
-    {
-        foreach ((array)$pluginSlug as $plugin) {
-            $option = '//*[@data-slug="' . $plugin . '"]/th/input';
-            $this->scrollTo($option, 0, -40);
-            $this->checkOption($option);
-        }
-        $this->scrollTo('select[name="action"]', 0, -40);
-        $this->selectOption('action', 'deactivate-selected');
-        $this->click("#doaction");
     }
 
     /**
@@ -144,6 +125,9 @@ trait WPBrowserMethods
      */
     public function amOnPluginsPage()
     {
+        if (!isset($this->pluginsPath)) {
+            throw new ModuleException($this, 'Plugins path is not set.');
+        }
         $this->amOnPage($this->pluginsPath);
     }
 
@@ -405,10 +389,58 @@ trait WPBrowserMethods
      */
     public function amEditingPostWithId($id)
     {
-        if (!is_numeric($id) && intval($id) == $id) {
+        if (!is_numeric($id) || (int)$id !== $id) {
             throw new \InvalidArgumentException('ID must be an int value');
         }
 
         $this->amOnAdminPage('/post.php?post=' . $id . '&action=edit');
+    }
+
+    protected function configBackCompat()
+    {
+        if (isset($this->config['adminUrl']) && ! isset($this->config['adminPath'])) {
+            $this->config['adminPath'] = $this->config['adminUrl'];
+        }
+    }
+
+    /**
+     * Sets the admin path.
+     *
+     * @param string $adminPath The admin path.
+     */
+    protected function setAdminPath($adminPath)
+    {
+        $this->adminPath = $adminPath;
+    }
+
+    /**
+     * Returns the admin path.
+     *
+     * @return string The admin path.
+     *
+     */
+    protected function getAdminPath()
+    {
+        return $this->adminPath;
+    }
+
+    /**
+     * Sets the login URL.
+     *
+     * @param string $loginUrl The login URL.
+     */
+    protected function setLoginUrl($loginUrl)
+    {
+        $this->loginUrl = $loginUrl;
+    }
+
+    /**
+     * Returns the login URL.
+     *
+     * @return string The login URL.
+     */
+    private function getLoginUrl()
+    {
+        return $this->loginUrl;
     }
 }

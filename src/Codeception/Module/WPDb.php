@@ -2,12 +2,11 @@
 
 namespace Codeception\Module;
 
-use Codeception\Exception\ModuleConfigException;
 use Codeception\Exception\ModuleException;
+use Codeception\Exception\ModuleRequireException;
 use Codeception\Lib\ModuleContainer;
 use Gumlet\ImageResize;
 use Gumlet\ImageResizeException;
-use Handlebars\Handlebars;
 use PDO;
 use tad\WPBrowser\Filesystem\Utils;
 use tad\WPBrowser\Generators\Blog;
@@ -18,6 +17,8 @@ use tad\WPBrowser\Generators\Tables;
 use tad\WPBrowser\Generators\User;
 use tad\WPBrowser\Generators\WpPassword;
 use tad\WPBrowser\Module\Support\DbDump;
+use function tad\WPBrowser\ensure;
+use function tad\WPBrowser\renderString;
 use function tad\WPBrowser\slug;
 
 /**
@@ -114,11 +115,6 @@ class WPDb extends Db
     protected $blogId = 0;
 
     /**
-     * @var Handlebars
-     */
-    protected $handlebars;
-
-    /**
      * @var Tables
      */
     protected $tables;
@@ -154,6 +150,27 @@ class WPDb extends Db
      */
     protected $didInit = false;
 
+    /**
+     * The database driver object.
+     *
+     * @var \Codeception\Lib\Driver\Db
+     */
+    protected $driver;
+
+    /**
+     * Whether the database has been previously populated or not.
+     *
+     * @var bool
+     */
+    protected $populated;
+
+    /**
+     * WPDb constructor.
+     *
+     * @param ModuleContainer $moduleContainer The module container handling the suite modules.
+     * @param null|array            $config The module configuration
+     * @param DbDump|null     $dbDump The database dump handler.
+     */
     public function __construct(ModuleContainer $moduleContainer, $config = null, DbDump $dbDump = null)
     {
         parent::__construct($moduleContainer, $config);
@@ -163,18 +180,12 @@ class WPDb extends Db
     /**
      * Initializes the module.
      *
-     * @param Handlebars $handlebars
-     *
-     * @param Tables     $table
-     *
-     * @throws ModuleConfigException
-     * @throws \Codeception\Exception\ModuleException
+     * @param Tables $table An instance of the tables management object.
      */
-    public function _initialize(Handlebars $handlebars = null, Tables $table = null)
+    public function _initialize(Tables $table = null)
     {
         parent::_initialize();
         $this->tablePrefix = $this->config['tablePrefix'];
-        $this->handlebars = $handlebars ?: new Handlebars();
         $this->tables = $table ?: new Tables();
         $this->didInit = true;
     }
@@ -1739,15 +1750,14 @@ class WPDb extends Db
      */
     protected function replaceNumbersInString($template, $i)
     {
-        if (!is_string($template)) {
+        if (! is_string($template)) {
             return $template;
         }
-        $thisTemplateData = array_merge($this->templateData, ['n' => $i]);
-        array_walk($thisTemplateData, function (&$value) use ($i) {
-            $value = is_callable($value) ? $value($i) : $value;
-        });
 
-        return $this->handlebars->render($template, $thisTemplateData);
+        $fnArgs = [ 'n' => $i ];
+        $data   = array_merge($this->templateData, $fnArgs);
+
+        return renderString($template, $data, $fnArgs);
     }
 
     /**
@@ -2108,8 +2118,8 @@ class WPDb extends Db
      * $linkIds = $I->haveManyLinksInDatabase(3, ['link_url' => 'http://example.org/test-{{n}}']);
      * ```
      *
-     * @param int        $count     The number of links to insert.
-     * @param array|null $overrides Overrides for the default arguments.
+     * @param int $count The number of links to insert.
+     * @param array $overrides Overrides for the default arguments.
      *
      * @return array An array of inserted `link_id`s.
      */
@@ -2780,9 +2790,15 @@ class WPDb extends Db
         $blogId = $this->haveInDatabase($this->grabBlogsTableName(), $data);
         $this->scaffoldBlogTables($blogId, $domainOrPath, (bool)$subdomain);
 
-        if (($fs = $this->getWpFilesystemModule(false)) instanceof WPFilesystem) {
+        try {
+            $fs = $this->getWpFilesystemModule();
             $this->debug('Scaffolding blog uploads directories.');
             $fs->makeUploadsDir("sites/{$blogId}");
+        } catch (ModuleException $e) {
+            $this->debugSection(
+                'Filesystem',
+                'Could not scaffold blog directories: WPFilesystem module not loaded in suite.'
+            );
         }
 
         return $blogId;
@@ -2803,9 +2819,7 @@ class WPDb extends Db
      */
     public function getSiteDomain()
     {
-        $domain = last(preg_split('~//~', $this->config['url']));
-
-        return $domain;
+        return last(explode('//', $this->config['url']));
     }
 
     /**
@@ -2849,23 +2863,18 @@ class WPDb extends Db
     /**
      * Gets the WPFilesystem module.
      *
-     * @param bool $throw Whether to throw an exception if the WPFilesystem module is not loaded in
-     *                    the suite or just return `false`.
+     * @return WPFilesystem The filesystem module instance if loaded in the suite.
      *
-     * @return \Codeception\Module\WPFilesystem The filesytem module instance if loaded in the suite.
-     *
-     * @throws \Codeception\Exception\ModuleException If the WPFilesystem module is not loaded in the suite.
+     * @throws ModuleException If the WPFilesystem module is not loaded in the suite.
      */
-    protected function getWpFilesystemModule($throw = true)
+    protected function getWpFilesystemModule()
     {
         try {
-            /** @noinspection PhpIncompatibleReturnTypeInspection */
-            return $this->getModule('WPFilesystem');
-        } catch (ModuleException $e) {
-            if (!$throw) {
-                return null;
-            }
+            /** @var WPFilesystem $fs */
+            $fs = $this->getModule('WPFilesystem');
 
+            return $fs;
+        } catch (ModuleException $e) {
             $message = 'This method requires the WPFilesystem module.';
             throw new ModuleException(__CLASS__, $message);
         }
@@ -2884,9 +2893,10 @@ class WPDb extends Db
      * $I->dontHaveBlogInDatabase(['domain' => 'test']);
      * ```
      *
-     * @param array $criteria      An array of search criteria to find the blog rows in the blogs table.
-     * @param bool  $removeTables  Remove the blog tables.
-     * @param bool  $removeUploads Remove the blog uploads; requires the `WPFilesystem` module.
+     * @param array $criteria An array of search criteria to find the blog rows in the blogs table.
+     * @param bool $removeTables Remove the blog tables.
+     * @param bool $removeUploads Remove the blog uploads; requires the `WPFilesystem` module.
+     * @throws \Exception
      */
     public function dontHaveBlogInDatabase(array $criteria, $removeTables = true, $removeUploads = true)
     {
@@ -2906,8 +2916,16 @@ class WPDb extends Db
                 }
             }
 
-            if ($removeUploads && ($fs = $this->getWpFilesystemModule(false))) {
-                $fs->deleteUploadedDir($fs->getBlogUploadsPath($blogId));
+            if ($removeUploads) {
+                try {
+                    $fs = $this->getWpFilesystemModule();
+                    $fs->deleteUploadedDir($fs->getBlogUploadsPath($blogId));
+                } catch (ModuleException $e) {
+                    $this->debugSection(
+                        'Filesystem',
+                        'Could not delete blog directories: WPFilesystem module not loaded in suite.'
+                    );
+                }
             }
 
             $this->dontHaveInDatabase($this->grabBlogsTableName(), $criteria);
@@ -3003,22 +3021,17 @@ class WPDb extends Db
      * @param string      $stylesheet The theme stylesheet slug, e.g. `twentysixteen`.
      * @param string|null $template   The theme template slug, e.g. `twentysixteen`, defaults to `$stylesheet`.
      *
-     * @param string|null $themeName  The theme name, e.g. `Acme`, defaults to the "title" version of `$stylesheet`.
+     * @param string|null $themeName The theme name, e.g. `Acme`, defaults to the "title" version of
+     *                                     `$stylesheet`.
      */
     public function useTheme($stylesheet, $template = null, $themeName = null)
     {
-        if (!(is_string($stylesheet))) {
-            throw new \InvalidArgumentException('Stylesheet must be a string');
-        }
-        if (!(is_string($template) || $template === null)) {
-            throw new \InvalidArgumentException('Template must either be a string or be null.');
-        }
-        if (!(is_string($themeName) || $themeName === null)) {
-            throw new \InvalidArgumentException('Current Theme must either be a string or be null.');
-        }
+        ensure(is_string($stylesheet), 'Stylesheet must be a string');
+        ensure(is_string((string)$template), 'Template must either be a string or be null.');
+        ensure(is_string((string)$themeName), 'Current Theme must either be a string or be null.');
 
         $template = $template ?: $stylesheet;
-        $themeName = $themeName ?: ucwords($stylesheet, " _");
+        $themeName = $themeName ?: ucwords($stylesheet, ' _');
 
         $this->haveOptionInDatabase('stylesheet', $stylesheet);
         $this->haveOptionInDatabase('template', $template);
@@ -3082,11 +3095,10 @@ class WPDb extends Db
      * $I->haveMenuItemInDatabase('test', 'Test two', 1);
      * ```
      *
-     * @param string     $menuSlug  The menu slug the item should be added to.
-     * @param string     $title     The menu item title.
-     * @param int|null   $menuOrder An optional menu order, `1` based.
-     * @param array|null $meta      An associative array that will be prefixed with `_menu_item_` for the item post
-     *                              meta.
+     * @param string $menuSlug The menu slug the item should be added to.
+     * @param string $title The menu item title.
+     * @param int|null $menuOrder An optional menu order, `1` based.
+     * @param array $meta An associative array that will be prefixed with `_menu_item_` for the item post meta.
      *
      * @return int The menu item post `ID`
      */
@@ -3162,26 +3174,46 @@ class WPDb extends Db
      *
      * Requires the WPFilesystem module.
      *
-     * @param string     $file       The absolute path to the attachment file.
-     * @param string|int $date       Either a string supported by the `strtotime` function or a UNIX timestamp that
+     * @param string $file The absolute path to the attachment file.
+     * @param string|int $date Either a string supported by the `strtotime` function or a UNIX timestamp that
      *                               should be used to build the "year/time" uploads sub-folder structure.
-     * @param array      $overrides  An associative array of values overriding the default ones.
-     * @param array      $imageSizes An associative array in the format [ <size> => [<width>,<height>]] to override the
+     * @param array $overrides An associative array of values overriding the default ones.
+     * @param array $imageSizes An associative array in the format [ <size> => [<width>,<height>]] to override the
      *                               image sizes created by default.
      *
      * @return int The post ID of the inserted attachment.
      *
-     * @throws \Codeception\Exception\ModuleException If the WPFilesystem module is not loaded in the suite.
+     * @throws ModuleException If the WPFilesystem module is not loaded in the suite or the file to attach is not
+     *                         readable
      * @throws \Gumlet\ImageResizeException If the image resize operation fails while trying to create the image sizes.
+     * @throws ModuleRequireException If the `WPFileSystem` module is not loaded in the suite.
      */
     public function haveAttachmentInDatabase($file, $date = 'now', array $overrides = [], $imageSizes = null)
     {
-        $fs = $this->getWpFilesystemModule();
+        try {
+            $fs = $this->getWpFilesystemModule();
+        } catch (ModuleException $e) {
+            throw new ModuleRequireException(
+                $this,
+                'The haveAttachmentInDatabase method requires the WPFilesystem module: update the suite ' .
+                'configuration to use it'
+            );
+        }
 
         $pathInfo = pathinfo($file);
         $slug = slug($pathInfo['filename']);
 
-        $uploadedFilePath = $fs->writeToUploadedFile($pathInfo['basename'], file_get_contents($file), $date);
+        if (!is_readable($file)) {
+            throw new ModuleException($this, "File [{$file}] is not readable.");
+        }
+
+        $data = file_get_contents($file);
+
+        if (false === $data) {
+            throw new ModuleException($this, "File [{$file}] contents could not be read.");
+        }
+
+        $uploadedFilePath = $fs->writeToUploadedFile($pathInfo['basename'], $data, $date);
         $uploadUrl = $this->grabSiteUrl(str_replace($fs->getWpRootFolder(), '', $uploadedFilePath));
         $uploadLocation = Utils::unleadslashit(str_replace($fs->getUploadsPath(), '', $uploadedFilePath));
 
@@ -3209,8 +3241,7 @@ class WPDb extends Db
             return $id;
         }
 
-        $imageWidth = $imageInfo[0];
-        $imageHeight = $imageInfo[1];
+        list($imageWidth, $imageHeight) = $imageInfo;
 
         if ($imageSizes === null) {
             $imageSizes = [
@@ -3220,7 +3251,7 @@ class WPDb extends Db
             ];
         }
 
-        $extension = $pathInfo['extension'];
+        $extension = isset($pathInfo['extension']) ? $pathInfo['extension'] : '';
 
         $createdImages = [];
         foreach ($imageSizes as $size => $thisSizes) {
@@ -3363,7 +3394,7 @@ class WPDb extends Db
      * @param bool   $purgeMeta   If set to `true` then the meta for the attachment will be purged too.
      * @param bool   $removeFiles Remove all files too, requires the `WPFilesystem` module to be loaded in the suite.
      *
-     * @throws \Codeception\Exception\ModuleException If the WPFilesystem module is not loaded in the suite
+     * @throws ModuleException If the WPFilesystem module is not loaded in the suite
      *                                                and the `$removeFiles` argument is `true`.
      */
     public function dontHaveAttachmentInDatabase(array $criteria, $purgeMeta = true, $removeFiles = false)
@@ -3393,18 +3424,28 @@ class WPDb extends Db
      *
      * @param array|int $attachmentIds An attachment post ID or an array of attachment post IDs.
      *
-     * @throws \Codeception\Exception\ModuleException If the `WPFilesystem` module is not loaded in the suite.
+     * @throws ModuleRequireException If the `WPFilesystem` module is not loaded in the suite.
      */
     public function dontHaveAttachmentFilesInDatabase($attachmentIds)
     {
+        try {
+            $fs = $this->getWpFilesystemModule();
+        } catch (ModuleException $e) {
+            throw new ModuleRequireException(
+                $this,
+                'The haveAttachmentInDatabase method requires the WPFilesystem module: update the suite ' .
+                'configuration to use it'
+            );
+        }
+
         $postmeta = $this->grabPostmetaTableName();
 
         foreach ((array)$attachmentIds as $attachmentId) {
             $attachedFile = $this->grabAttachmentAttachedFile($attachmentId);
             $attachmentMetadata = $this->grabAttachmentMetadata($attachmentId);
 
-            $fs = $this->getWpFilesystemModule();
             $filesPath = Utils::untrailslashit($fs->getUploadsPath(dirname($attachedFile)));
+
 
             if (!isset($attachmentMetadata['sizes']) && is_array($attachmentMetadata['sizes'])) {
                 continue;
@@ -3649,7 +3690,7 @@ class WPDb extends Db
      * @return string The full blog table name, including the table prefix or an empty string
      *                if the table does not exist.
      *
-     * @throws \Codeception\Exception\ModuleException If no tables are found for the blog.
+     * @throws ModuleException If no tables are found for the blog.
      */
     public function grabBlogTableName($blogId, $table)
     {
@@ -3767,7 +3808,12 @@ class WPDb extends Db
     protected function prepareSqlDump($dump)
     {
         // Remove C-style comments (except MySQL directives).
-        $prepared = preg_replace('%/\*(?!!\d+).*?\*/%s', '', $dump);
+        $prepared = preg_replace('%/\*(?!!\d+).*?\*/%s', '', $dump) ?: '';
+
+        if (empty($prepared)) {
+            return '';
+        }
+
         return $this->_replaceUrlInDump($prepared);
     }
 

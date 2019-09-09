@@ -7,22 +7,30 @@ use Dotenv\Dotenv;
 use Symfony\Component\Console\Exception\RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 use tad\WPBrowser\Template\Data;
+use function tad\WPBrowser\parseUrl;
+use function tad\WPBrowser\slug;
 
 class Wpbrowser extends Bootstrap
 {
 
     /**
+     * Whether to output during the bootstrap process or not.
+     *
      * @var bool
      */
     protected $quiet = false;
 
     /**
+     * Whether to bootstrap with user interaction or not.
+     *
      * @var bool
      */
     protected $noInteraction = false;
 
     /**
-     * @var
+     * The name of the environment file to use.
+     *
+     * @var string
      */
     protected $envFileName = '';
 
@@ -39,19 +47,25 @@ class Wpbrowser extends Bootstrap
 
         $input = $this->input;
 
-        $this->quiet = $this->input->getOption('quiet');
-        $this->noInteraction = $this->input->getOption('no-interaction');
+        $this->quiet = (bool)$this->input->getOption('quiet');
+        $this->noInteraction = (bool)$this->input->getOption('no-interaction');
 
         if ($this->noInteraction || $this->quiet) {
             $interactive = false;
         }
 
         if ($input->getOption('namespace')) {
-            $this->namespace = trim($input->getOption('namespace'), '\\') . '\\';
+            $namespace = $input->getOption('namespace');
+            if (is_string($namespace)) {
+                $this->namespace = trim($namespace, '\\') . '\\';
+            }
         }
 
         if ($input->hasOption('actor') && $input->getOption('actor')) {
-            $this->actorSuffix = $input->getOption('actor');
+            $actor = $input->getOption('actor');
+            if (is_string($actor)) {
+                $this->actorSuffix = $actor;
+            }
         }
 
         if ($interactive) {
@@ -70,7 +84,7 @@ class Wpbrowser extends Bootstrap
             return;
         }
 
-        if ($interactive === null) {
+        if ($interactive === true) {
             $this->say();
             $interactive = $this->ask('Would you like to set up the suites interactively now?', 'yes');
             $this->say(' --- ');
@@ -199,9 +213,11 @@ class Wpbrowser extends Bootstrap
     }
 
     /**
-     * @param $interactive
+     * Builds, and returns, the installation data.
      *
-     * @return array
+     * @param bool $interactive Whether to build the installation data with user interactive input or not.
+     *
+     * @return array The installation data.
      */
     protected function getInstallationData($interactive)
     {
@@ -358,7 +374,7 @@ class Wpbrowser extends Bootstrap
             'http://wp.test'
         );
         $installationData['testSiteWpUrl'] = rtrim($installationData['testSiteWpUrl'], '/');
-        $url = parse_url($installationData['testSiteWpUrl']);
+        $url = parseUrl($installationData['testSiteWpUrl']);
         $installationData['urlScheme'] = empty($url['scheme']) ? 'http' : $url['scheme'];
         $installationData['testSiteWpDomain'] = empty($url['host']) ? 'example.com' : $url['host'];
         $installationData['urlPort'] = empty($url['port']) ? '' : ':' . $url['port'];
@@ -447,7 +463,8 @@ class Wpbrowser extends Bootstrap
 
     protected function normalizePath($path)
     {
-        $pathFrags = preg_split('/(\\/|\\\\)/u', $path);
+        $pathFrags = preg_split('#([/\\\])#u', $path) ?: [];
+
         return implode('/', $pathFrags);
     }
 
@@ -456,31 +473,31 @@ class Wpbrowser extends Bootstrap
         $filename = $this->workDir . DIRECTORY_SEPARATOR . $this->envFileName;
 
         $envKeys = [
-            'testSiteDbHost',
-            'testSiteDbName',
-            'testSiteDbUser',
-            'testSiteDbPassword',
-            'testSiteTablePrefix',
-            'testSiteWpUrl',
-            'testSiteAdminUsername',
-            'testSiteAdminPassword',
-            'testSiteWpAdminPath',
-            'wpRootFolder',
-            'testDbName',
-            'testDbHost',
-            'testDbUser',
-            'testDbPassword',
-            'testTablePrefix',
-            'testSiteWpDomain',
-            'testSiteAdminEmail',
+            'testSiteDbHost'=>true,
+            'testSiteDbName'=>true,
+            'testSiteDbUser'=>true,
+            'testSiteDbPassword'=>true,
+            'testSiteTablePrefix'=>true,
+            'testSiteWpUrl'=>true,
+            'testSiteAdminUsername'=>true,
+            'testSiteAdminPassword'=>true,
+            'testSiteWpAdminPath'=>true,
+            'wpRootFolder'=>true,
+            'testDbName'=>true,
+            'testDbHost'=>true,
+            'testDbUser'=>true,
+            'testDbPassword'=>true,
+            'testTablePrefix'=>true,
+            'testSiteWpDomain'=>true,
+            'testSiteAdminEmail'=>true,
         ];
 
-        $envEntries = array_intersect_key($installationData, array_combine($envKeys, $envKeys));
+        $envEntries = array_intersect_key($installationData, $envKeys);
 
         $envFileLines = [];
 
         foreach ($envEntries as $key => $value) {
-            $key = strtoupper(preg_replace('/([A-Z])/u', '_$1', $key));
+            $key = strtoupper(slug($key, '_'));
             if (is_bool($value)) {
                 $value ? 'true' : 'false';
             } elseif (null === $value) {
@@ -617,7 +634,7 @@ EOF;
         $this->createSuite($installationData['functionalSuiteSlug'], $actor, $suiteConfig);
     }
 
-    protected function createAcceptanceSuite($actor = 'Acceptance', array $installationData = null)
+    protected function createAcceptanceSuite($actor = 'Acceptance', array $installationData = [])
     {
         $installationData = new Data($installationData);
         $WPDb = !empty($installationData['activeModules']['WPDb']) ? '- WPDb' : '# - WPDb';

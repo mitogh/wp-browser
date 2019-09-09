@@ -35,6 +35,7 @@ PROJECT := $(shell basename ${CURDIR})
 	pll_test \
 	pll_w_failures \
 	pll_docker_builds
+	phpstan
 
 define wp_config_extra
 if ( filter_has_var( INPUT_SERVER, 'HTTP_HOST' ) ) {
@@ -47,7 +48,7 @@ if ( filter_has_var( INPUT_SERVER, 'HTTP_HOST' ) ) {
 }
 endef
 
-# PUll all the Docker images this repository will use in building images or running processes.
+# Pull all the Docker images this repository will use in building images or running processes.
 docker_pull:
 	images=( \
 		'texthtml/phpcs' \
@@ -90,10 +91,6 @@ cs_fix_n_sniff: cs_fix cs_sniff
 composer_update: composer.json
 	docker run --rm -v ${CURDIR}:/app composer/composer:master-php5 update
 
-# Runs phpstan on the source files.
-phpstan: src
-	docker run --rm -v ${CURDIR}:/app phpstan/phpstan analyse -l 5 /app/src/Codeception /app/src/tad
-
 ci_setup_db:
 	# Start just the database container.
 	docker-compose -f docker/${COMPOSE_FILE} up -d db
@@ -121,6 +118,10 @@ ci_before_install: ci_setup_db ci_setup_wp
 	docker-compose -f docker/${COMPOSE_FILE} up -d chromedriver
 
 ci_install:
+	# Remove phpstan dependencies on lower PHP versions.
+	if [[ $${TRAVIS_PHP_VERSION:0:3} < "7.1" ]]; then \
+		composer remove --dev phpstan/phpstan phpstan/phpstan-shim szepeviktor/phpstan-wordpress; \
+	fi
 	# Update Composer using the host machine PHP version.
 	composer require codeception/codeception:"${CODECEPTION_VERSION}"
 	# Copy over the wp-cli.yml configuration file.
@@ -185,6 +186,9 @@ ci_script:
 	vendor/bin/codecept run wploader_wpdb_interaction
 	docker-compose -f test_runner.compose.yml run waiter
 	docker-compose -f test_runner.compose.yml run test_runner bash -c 'cd /project; vendor/bin/codecept run wpcli_module'
+	if [[ $${TRAVIS_PHP_VERSION:0:3} > "7.0" ]]; then \
+		STATIC_ANALYSIS=1 vendor/bin/phpstan analyze -l max; \
+	fi
 
 # Restarts the project containers.
 ci_docker_restart:
@@ -281,6 +285,8 @@ require_codeception_3:
 	rm -rf composer.lock vendor/codeception vendor/phpunit vendor/sebastian \
 		&& composer require codeception/codeception:^3.0
 
+phpstan:
+	vendor/bin/phpstan analyze -l max
 
 build_test_containers:
 	docker-compose build --build-arg BUILD_XDEBUG_ENABLE=0 test_runner
@@ -376,3 +382,4 @@ $(web_suites): %:
 	@docker-compose run --rm web_test_runner run $@ -f --ext DotReporter
 
 pll_tests: $(unit_suites) $(functional_suites) $(web_suites)
+

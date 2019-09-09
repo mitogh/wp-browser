@@ -6,5 +6,15 @@ namespace Helper;
 
 class Climodule extends \Codeception\Module
 {
+    public function setCliEnv($key, $value)
+    {
+        /** @var \Codeception\Module\WPCLI $cli */
+        $cli = $this->getModule('WPCLI');
+        $cliConfig = $cli->_getConfig();
+        $cliConfig['env'] = isset($cliConfig['env']) ?
+            array_merge($cliConfig['env'], [$key => $value])
+            : [$key => $value];
 
+        $cli->_reconfigure($cliConfig);
+    }
 }

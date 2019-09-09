@@ -2,12 +2,18 @@
 
 namespace Codeception\TestCase;
 
+use PHPUnit\Framework\AssertionFailedError;
+
 abstract class WPRestPostTypeControllerTestCase extends WPRestControllerTestCase
 {
 
     protected function check_post_data($post, $data, $context, $links)
     {
         $post_type_obj = get_post_type_object($post->post_type);
+
+        if (!$post_type_obj instanceof \WP_Post_Type) {
+            throw new \RuntimeException('Cannot find the ' . $post->post_type . ' post type.');
+        }
 
         // Standard fields
         $this->assertEquals($post->ID, $data['id']);
@@ -38,7 +44,7 @@ abstract class WPRestPostTypeControllerTestCase extends WPRestControllerTestCase
                     $this->assertEquals($post->post_parent, $data['parent']);
                 } else {
                     $this->assertEquals($post->post_parent, $data['parent']['id']);
-                    $this->check_get_post_response($data['parent'], get_post($data['parent']['id']), 'view-parent');
+                    $this->check_get_post_response($data['parent'], 'view-parent');
                 }
             } else {
                 $this->assertEmpty($data['parent']);
@@ -154,9 +160,16 @@ abstract class WPRestPostTypeControllerTestCase extends WPRestControllerTestCase
         }
 
         $taxonomies = wp_list_filter(get_object_taxonomies($post->post_type, 'objects'), array('show_in_rest' => true));
+
         foreach ($taxonomies as $taxonomy) {
             $this->assertTrue(isset($data[$taxonomy->rest_base]));
+
             $terms = wp_get_object_terms($post->ID, $taxonomy->name, array('fields' => 'ids'));
+
+            if ($terms instanceof \WP_Error) {
+                throw new AssertionFailedError('Error while fetching object terms: ' . $terms->get_error_message());
+            }
+
             sort($terms);
             sort($data[$taxonomy->rest_base]);
             $this->assertEquals($terms, $data[$taxonomy->rest_base]);
@@ -166,6 +179,11 @@ abstract class WPRestPostTypeControllerTestCase extends WPRestControllerTestCase
         if ($links) {
             $links = test_rest_expand_compact_links($links);
             $post_type = get_post_type_object($data['type']);
+
+            if (!$post_type instanceof \WP_Post_Type) {
+                throw new \RuntimeException('Cannot find the ' . $data['type'] . ' post type.');
+            }
+
             $this->assertEquals(
                 $links['self'][0]['href'],
                 rest_url('wp/v2/' . $post_type->rest_base . '/' . $data['id'])

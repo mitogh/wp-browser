@@ -3,18 +3,34 @@ All notable changes after version 1.6.16 to this project will be documented in t
 This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [unreleased] Unreleased
+
+## [2.2.24] 2019-09-06;
+### Changed
+- a number of refactorings and fixings following addition of `phpstan`, fixes #291 (thanks @szepeviktor)
+
+## [2.2.23] 2019-09-06;
+### Fixed
+- smaller adjustment to `slug` function and number handling
+
+## [2.2.22] 2019-09-05;
+### Added
+- support for environment variables to the `WPCLI` module, fixes #299 (thanks @TimothyBJacobs)
+
+## [2.2.21] 2019-09-04;
 ### Added
 - the `tad\WPBrowser\slug` function to create the slug version of a string
 - the `tad\WPBrowser\buildCommandLine` function to generate a Symfony Process compatible command line (array format) from a string one
-- the `WPCLI::cliToString` method to get a wp-cli command output as string, fixes #297
+- the `tad\WPBrowser\renderString` function to render a string in the Handlebars format from data
+- the `WPCLI::cliToString` method to get a wp-cli command output as string, fixes #297 (thanks @TimothyBJacobs)
 
 ### Changed
 - removed the `bacon/bacon-string-utils` dependency
-- added support for custom extra arguments to the `WPCLI` module, see documentation, fixes #295
+- added support for custom extra arguments to the `WPCLI` module, see documentation, fixes #295 (thanks @TimothyBJacobs)
+- replaced the `xamin/handlebars.php` dependency with the `zordius/lightncandy` one
 
 ### Fixed
-- lazy evaluation of the WordPress path in `WPCLI` module, fixes #294
-- correct evaluation of command exit status in `WPCLI` module, fixes #296
+- lazy evaluation of the WordPress path in `WPCLI` module, fixes #294 (thanks @TimothyBJacobs)
+- correct evaluation of command exit status in `WPCLI` module, fixes #296 (thanks @TimothyBJacobs)
 
 ## [2.2.20] 2019-08-26;
 ### Fixed
@@ -1108,4 +1124,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 [2.2.18]: https://github.com/lucatume/wp-browser/compare/2.2.17...2.2.18
 [2.2.19]: https://github.com/lucatume/wp-browser/compare/2.2.18...2.2.19
 [2.2.20]: https://github.com/lucatume/wp-browser/compare/2.2.19...2.2.20
-[unreleased]: https://github.com/lucatume/wp-browser/compare/2.2.20...HEAD
+[2.2.21]: https://github.com/lucatume/wp-browser/compare/2.2.20...2.2.21
+[2.2.22]: https://github.com/lucatume/wp-browser/compare/2.2.21...2.2.22
+[2.2.23]: https://github.com/lucatume/wp-browser/compare/2.2.22...2.2.23
+[2.2.24]: https://github.com/lucatume/wp-browser/compare/2.2.23...2.2.24
+[unreleased]: https://github.com/lucatume/wp-browser/compare/2.2.24...HEAD

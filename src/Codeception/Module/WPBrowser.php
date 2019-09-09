@@ -17,46 +17,6 @@ class WPBrowser extends PhpBrowser
      * @var array
      */
     protected $requiredFields = ['adminUsername', 'adminPassword', 'adminPath'];
-    /**
-     * The login screen absolute URL
-     *
-     * @var string
-     */
-    protected $loginUrl;
-    /**
-     * The admin absolute URL.
-     *
-     * @var [type]
-     */
-    protected $adminPath;
-    /**
-     * The plugin screen absolute URL
-     *
-     * @var string
-     */
-    protected $pluginsPath;
-
-    /**
-     * Initializes the module setting the properties values.
-     */
-    public function _initialize()
-    {
-        parent::_initialize();
-
-        $this->configBackCompat();
-
-        $adminPath = $this->config['adminPath'];
-        $this->loginUrl = str_replace('wp-admin', 'wp-login.php', $adminPath);
-        $this->adminPath = rtrim($adminPath, '/');
-        $this->pluginsPath = $this->adminPath . '/plugins.php';
-    }
-
-    protected function configBackCompat()
-    {
-        if (isset($this->config['adminUrl']) && !isset($this->config['adminPath'])) {
-            $this->config['adminPath'] = $this->config['adminUrl'];
-        }
-    }
 
     /**
      * Returns all the cookies whose name matches a regex pattern.
@@ -91,7 +51,7 @@ class WPBrowser extends PhpBrowser
 
         $this->debug('Cookies matching pattern ' . $cookiePattern . ' : ' . implode(', ', $cookieList));
 
-        return is_array($matchingCookies) ? $matchingCookies : null;
+        return count($matchingCookies) ? $matchingCookies : null;
     }
 
     /**

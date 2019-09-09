@@ -136,8 +136,11 @@ abstract class WPAjaxTestCase extends WPTestCase
 
         // Register the core actions
         foreach (array_merge(self::$_core_actions_get, self::$_core_actions_post) as $action) {
-            if (function_exists('wp_ajax_' . str_replace('-', '_', $action))) {
-                add_action('wp_ajax_' . $action, 'wp_ajax_' . str_replace('-', '_', $action), 1);
+            $callback = 'wp_ajax_' . str_replace('-', '_', $action);
+
+            if (function_exists($callback)) {
+                /** @var callable $callback */
+                add_action('wp_ajax_' . $action, $callback, 1);
             }
         }
 
@@ -178,7 +181,7 @@ abstract class WPAjaxTestCase extends WPTestCase
         $_GET = array();
         unset($GLOBALS['post']);
         unset($GLOBALS['comment']);
-        remove_filter('wp_die_ajax_handler', array($this, 'getDieHandler'), 1, 1);
+        remove_filter('wp_die_ajax_handler', array($this, 'getDieHandler'), 1);
         remove_action('clear_auth_cookie', array($this, 'logout'));
         error_reporting($this->_error_level);
         set_current_screen('front');
@@ -190,7 +193,12 @@ abstract class WPAjaxTestCase extends WPTestCase
     public function logout()
     {
         unset($GLOBALS['current_user']);
-        $cookies = array(AUTH_COOKIE, SECURE_AUTH_COOKIE, LOGGED_IN_COOKIE, USER_COOKIE, PASS_COOKIE);
+        $cookies = array_filter(array_map(
+            static function ($cookieConst) {
+                return defined($cookieConst) ? constant($cookieConst) : false;
+            },
+            ['AUTH_COOKIE', 'SECURE_AUTH_COOKIE', 'LOGGED_IN_COOKIE', 'USER_COOKIE', 'PASS_COOKIE']
+        ));
         foreach ($cookies as $c) {
             unset($_COOKIE[$c]);
         }
@@ -199,7 +207,7 @@ abstract class WPAjaxTestCase extends WPTestCase
     /**
      * Return our callback handler
      *
-     * @return callback
+     * @return callable
      */
     public function getDieHandler()
     {
@@ -220,7 +228,10 @@ abstract class WPAjaxTestCase extends WPTestCase
      * $this->expectException( WPAjaxDieContinueException::class, 'something contained in $message' );
      * </code>
      *
-     * @param string $message
+     * @param mixed $message The message that was sent to this handler.
+     *
+     * @throws \WPAjaxDieContinueException If the accumulated last response is not empty.
+     * @throws \WPAjaxDieStopException If the accumulated last response is empty.
      */
     public function dieHandler($message)
     {
@@ -229,12 +240,12 @@ abstract class WPAjaxTestCase extends WPTestCase
         if ('' === $this->_last_response) {
             if (is_scalar($message)) {
                 throw new \WPAjaxDieStopException((string)$message);
-            } else {
-                throw new \WPAjaxDieStopException('0');
             }
-        } else {
-            throw new \WPAjaxDieContinueException($message);
+
+            throw new \WPAjaxDieStopException('0');
         }
+
+        throw new \WPAjaxDieContinueException($message);
     }
 
     /**

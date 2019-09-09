@@ -275,6 +275,13 @@ class WPLoader extends Module
         return $this->wpRootFolder;
     }
 
+    /**
+     * Checks the *Db modules loaded in the suite to ensure their configuration is compatible with this module current
+     * one.
+     *
+     * @throws ModuleConflictException If the configuration of one *Db module is not compatible with this module
+     *                                 configuration.
+     */
     protected function ensureDbModuleCompat()
     {
         $interference_candidates = ['Db', 'WPDb'];
@@ -283,7 +290,7 @@ class WPLoader extends Module
             if (! $this->moduleContainer->hasModule($moduleName)) {
                 continue;
             }
-            /** @var \Codeception\Module $module */
+            /** @var Module $module */
             $module = $allModules[$moduleName];
             $cleanup_config = $module->_getConfig('cleanup');
             if (! empty($cleanup_config)) {
@@ -384,8 +391,7 @@ class WPLoader extends Module
     {
         $folder = $folder ?: codecept_root_dir();
         $frags = $this->config['configFile'];
-        $frags = is_array($frags) ?: [$frags];
-        foreach ($frags as $frag) {
+        foreach ((array)$frags as $frag) {
             if (! empty($frag)) {
                 $configFile = Utils::findHereOrInParent($frag, $folder);
                 if (! file_exists($configFile)) {
@@ -414,7 +420,8 @@ class WPLoader extends Module
     protected function getPluginsFolder()
     {
         if (empty($this->pluginsFolder)) {
-            $path = empty($this->config['pluginsFolder']) ? WP_PLUGIN_DIR
+            $path = empty($this->config['pluginsFolder']) && defined('WP_PLUGIN_DIR') ?
+                WP_PLUGIN_DIR
                 : realpath($this->getWpRootFolder() . Utils::unleadslashit($this->config['pluginsFolder']));
 
             if (! file_exists($path)) {
@@ -625,7 +632,6 @@ class WPLoader extends Module
                     . 'this might be due to a wrong configuration of the `wpRootFolder` setting or a missing inclusion '
                     . 'of one ore more additional config files using the `configFile` setting.'
                 );
-                continue;
             }
             require_once $path;
         }
