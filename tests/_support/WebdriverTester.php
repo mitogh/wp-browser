@@ -16,9 +16,9 @@
  *
  * @SuppressWarnings(PHPMD)
  */
-class WebDriverTester extends \Codeception\Actor
+class WebdriverTester extends \Codeception\Actor
 {
-    use _generated\WebDriverTesterActions;
+    use _generated\WebdriverTesterActions;
 
     /**
      * Define custom actions here

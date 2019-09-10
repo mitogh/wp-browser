@@ -2,15 +2,6 @@ version: '3.2'
 
 services:
 
-  chromedriver:
-    image: selenium/standalone-chrome:3.141.59-oxygen
-    depends_on:
-      - waiter
-    links:
-      - "wp:wp.test"
-      - "wp:test1.wp.test"
-      - "wp:test2.wp.test"
-
   db:
     image: mariadb:latest
     environment:
@@ -26,7 +17,7 @@ services:
       dockerfile: docker/wordpress/Dockerfile
     image: ${COMPOSE_PROJECT_NAME:-wpbrowser}_wp:latest
     depends_on:
-      - db_waiter
+      - db
     links:
       - db
     environment:
@@ -34,11 +25,15 @@ services:
       WORDPRESS_DB_HOST: db
       WORDPRESS_DB_USER: root
       WORDPRESS_DB_PASSWORD: ""
-    healthcheck:
-      test: ["CMD","curl","http://localhost"]
-      interval: 1s
-      timeout: 20s
-      retries: 20
+
+  chromedriver:
+    image: selenium/standalone-chrome:3.141.59-oxygen
+    depends_on:
+      - wp
+    links:
+      - "wp:wp.test"
+      - "wp:test1.wp.test"
+      - "wp:test2.wp.test"
 
   waiter:
     image: waisbrot/wait
@@ -74,6 +69,8 @@ services:
         BUILD_PHP_IDEKEY: ${BUILD_PHP_IDEKEY:-PHPSTORM}
         BUILD_XDEBUG_ENABLE: ${BUILD_XDEBUG_ENABLE:-1}
     image: wpbrowser_test_runner:latest
+    volumes:
+      - ./tests/_output:/project/tests/_output
     environment:
       # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
       # Build systems are usually Linux-based.
@@ -84,9 +81,11 @@ services:
 
   wp_test_runner:
     image: wpbrowser_test_runner:latest
+    volumes:
+      - ./tests/_output:/project/tests/_output
     depends_on:
-      - wp_waiter
-      - db_waiter
+      - db
+      - wp
     links:
       - db
       - wp
@@ -100,9 +99,11 @@ services:
 
   web_test_runner:
     image: wpbrowser_test_runner:latest
+    volumes:
+      - ./tests/_output:/project/tests/_output
     depends_on:
-      - wp_waiter
-      - db_waiter
+      - db
+      - wp
       - chromedriver
     links:
       - db

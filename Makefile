@@ -373,13 +373,21 @@ functional_suites = climodule
 web_suites = webdriver
 
 $(unit_suites): %:
-	@docker-compose run --rm test_runner run $@ -f --ext DotReporter
+	@docker-compose --project-name test-$@ run --rm test_runner run $@ -f --ext DotReporter
+
+test_unit: $(unit_suites)
 
 $(functional_suites): %:
-	@docker-compose run --rm wp_test_runner run $@ -f --ext DotReporter
+	@docker-compose --project-name test-$@ run --rm waiter \
+		&& docker-compose --project-name test-$@ run wp_test_runner run $@ -f --ext DotReporter
+
+test_functional: $(functional_suites)
 
 $(web_suites): %:
-	@docker-compose run --rm web_test_runner run $@ -f --ext DotReporter
+	@docker-compose --project-name test-$@ run --rm waiter \
+		&& docker-compose --project-name test-$@ run web_test_runner run $@ -f --ext DotReporter
 
-pll_tests: $(unit_suites) $(functional_suites) $(web_suites)
+test_web: $(web_suites)
+
+test: $(unit_suites) $(functional_suites) $(web_suites)
 
