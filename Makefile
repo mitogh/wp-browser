@@ -330,7 +330,7 @@ wordpress_setup:
 	# Install WordPress in multisite mode.
 	vendor/bin/wp core multisite-install \
 		--path=${CURDIR}/vendor/wordpress/wordpress \
-		--url=http://wp \
+		--url=http://wp.test \
 		--base=/ \
 		--subdomains \
 		--title=Test \
@@ -378,14 +378,14 @@ $(unit_suites): %:
 test_unit: $(unit_suites)
 
 $(functional_suites): %:
-	@docker-compose --project-name test-$@ run --rm waiter \
+	@docker-compose --project-name test-$@ run --rm wp_waiter \
 		&& docker-compose --project-name test-$@ run wp_test_runner run $@ -f --ext DotReporter
 
 test_functional: $(functional_suites)
 
 $(web_suites): %:
-	@docker-compose --project-name test-$@ run --rm waiter \
-		&& docker-compose --project-name test-$@ run web_test_runner run $@ -f --ext DotReporter
+	@docker-compose --project-name test-$@ run --rm web_waiter \
+		&& docker-compose --project-name test-$@ run web_test_runner run $@ -f
 
 test_web: $(web_suites)
 

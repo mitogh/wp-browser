@@ -5,9 +5,9 @@ $I->wantTo('access the homepage of a subdomain site');
 $I->amOnSubdomain('test1');
 $I->amOnPage('/');
 $I->seeElement('body.home');
-$I->seeInTitle('Test Subdomain 1');
+$I->seeInTitle('Test 1');
 
 $I->amOnSubdomain('test2');
 $I->amOnPage('/');
 $I->seeElement('body.home');
-$I->seeInTitle('Test Subdomain 2');
+$I->seeInTitle('Test 2');

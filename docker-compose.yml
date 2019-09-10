@@ -10,6 +10,8 @@ services:
       MYSQL_USER: wordrpess
       MYSQL_PASSWORD: wordpress
     command: mysqld --debug-no-sync
+    ports:
+      - "4406:3306"
 
   wp:
     build:
@@ -35,7 +37,14 @@ services:
       - "wp:test1.wp.test"
       - "wp:test2.wp.test"
 
-  waiter:
+  db_waiter:
+    image: waisbrot/wait
+    depends_on:
+      - db
+    environment:
+      - TARGETS=db:3306
+
+  wp_waiter:
     image: waisbrot/wait
     depends_on:
       - db
@@ -43,19 +52,14 @@ services:
     environment:
       - TARGETS=db:3306,wp:80
 
-  db_waiter:
-    image: martin/wait
+  web_waiter:
+    image: waisbrot/wait
     depends_on:
       - db
-    environment:
-      - db_TCP=tcp://db:3306
-
-  wp_waiter:
-    image: martin/wait
-    depends_on:
       - wp
+      - chromedriver
     environment:
-      - wp_TCP=tcp://wp:80
+      - TARGETS=db:3306,wp:80,chromedriver:4444
 
   test_runner:
     # Instead of using a pre-built image, let's build it from the file.
@@ -70,7 +74,7 @@ services:
         BUILD_XDEBUG_ENABLE: ${BUILD_XDEBUG_ENABLE:-1}
     image: wpbrowser_test_runner:latest
     volumes:
-      - ./tests/_output:/project/tests/_output
+      - ./tests:/project/tests
     environment:
       # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
       # Build systems are usually Linux-based.
@@ -82,7 +86,7 @@ services:
   wp_test_runner:
     image: wpbrowser_test_runner:latest
     volumes:
-      - ./tests/_output:/project/tests/_output
+      - ./tests:/project/tests
     depends_on:
       - db
       - wp
@@ -100,7 +104,7 @@ services:
   web_test_runner:
     image: wpbrowser_test_runner:latest
     volumes:
-      - ./tests/_output:/project/tests/_output
+      - ./tests:/project/tests
     depends_on:
       - db
       - wp
