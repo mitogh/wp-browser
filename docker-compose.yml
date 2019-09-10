@@ -18,8 +18,6 @@ services:
       context: .
       dockerfile: docker/wordpress/Dockerfile
     image: ${COMPOSE_PROJECT_NAME:-wpbrowser}_wp:latest
-    depends_on:
-      - db
     links:
       - db
     environment:
@@ -30,8 +28,6 @@ services:
 
   chromedriver:
     image: selenium/standalone-chrome:3.141.59-oxygen
-    depends_on:
-      - wp
     links:
       - "wp:wp.test"
       - "wp:test1.wp.test"
@@ -39,14 +35,14 @@ services:
 
   db_waiter:
     image: waisbrot/wait
-    depends_on:
+    links:
       - db
     environment:
       - TARGETS=db:3306
 
   wp_waiter:
     image: waisbrot/wait
-    depends_on:
+    links:
       - db
       - wp
     environment:
@@ -54,7 +50,7 @@ services:
 
   web_waiter:
     image: waisbrot/wait
-    depends_on:
+    links:
       - db
       - wp
       - chromedriver
@@ -87,9 +83,6 @@ services:
     image: wpbrowser_test_runner:latest
     volumes:
       - ./tests:/project/tests
-    depends_on:
-      - db
-      - wp
     links:
       - db
       - wp
@@ -105,10 +98,6 @@ services:
     image: wpbrowser_test_runner:latest
     volumes:
       - ./tests:/project/tests
-    depends_on:
-      - db
-      - wp
-      - chromedriver
     links:
       - db
       - wp
