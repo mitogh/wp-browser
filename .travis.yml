@@ -23,6 +23,10 @@ matrix:
       env: CODECEPTION_VERSION="^2.5"
     - php: '7.2'
       env: CODECEPTION_VERSION="^3.0"
+    - php: '7.3'
+      env: CODECEPTION_VERSION="^2.5"
+    - php: '7.3'
+      env: CODECEPTION_VERSION="^3.0"
 
 services:
   - docker
@@ -67,6 +71,7 @@ before_install:
   - export PATH=vendor/bin:$PATH
 
 install:
+  - make ci_conditionals
   - make ci_install
 
 before_script:

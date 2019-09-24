@@ -75,7 +75,6 @@ docker/parallel-lint/id:
 # Lints the source files with PHP Parallel Lint, requires the parallel-lint:5.6 image to be built.
 lint: docker/parallel-lint/id
 	docker run --rm -v ${CURDIR}:/app lucatume/parallel-lint:5.6 \
-		--exclude /app/src/tad/WPBrowser/Compat/PHPUnit/Version8 \
 		--colors \
 		/app/src
 
@@ -117,13 +116,13 @@ ci_before_install: ci_setup_db ci_setup_wp
 	WP_CONTAINER_IP=`docker inspect -f '{{ .NetworkSettings.Networks.docker_default.IPAddress }}' wpbrowser_wp` \
 	docker-compose -f docker/${COMPOSE_FILE} up -d chromedriver
 
-ci_install:
+ci_conditionals:
 	# Remove phpstan dependencies on lower PHP versions.
-	if [[ $${TRAVIS_PHP_VERSION:0:3} < "7.1" ]]; then \
-		composer remove --dev phpstan/phpstan phpstan/phpstan-shim szepeviktor/phpstan-wordpress; \
-	fi
+	if [[ $${TRAVIS_PHP_VERSION:0:3} < "7.1" ]]; then sed -i.bak '/phpstan/d' composer.json; fi
 	# Update Composer using the host machine PHP version.
 	composer require codeception/codeception:"${CODECEPTION_VERSION}"
+
+ci_install:
 	# Copy over the wp-cli.yml configuration file.
 	docker cp docker/wp-cli.yml wpbrowser_wp:/var/www/html/wp-cli.yml
 	# Copy over the wp-config.php file.
@@ -278,12 +277,19 @@ wp_dump:
 pre_commit: lint cs_sniff
 
 require_codeception_2.5:
-	rm -rf composer.lock vendor/codeception vendor/phpunit vendor/sebastian \
-		&& composer require codeception/codeception:^2.5
+	mv vendor/wordpress _wordpress
+	rm -rf composer.lock vendor && composer require codeception/codeception:^2.5
+	mv _wordpress vendor/wordpress
 
 require_codeception_3:
-	rm -rf composer.lock vendor/codeception vendor/phpunit vendor/sebastian \
-		&& composer require codeception/codeception:^3.0
+	mv vendor/wordpress _wordpress
+	rm -rf composer.lock vendor && composer require codeception/codeception:^3.0
+	mv _wordpress vendor/wordpress
+
+require_phpunit_8:
+	mv vendor/wordpress _wordpress
+	rm -rf composer.lock vendor && composer require codeception/codeception:^3.0 phpunit/phpunit:^8.0
+	mv _wordpress vendor/wordpress
 
 phpstan:
 	vendor/bin/phpstan analyze -l max

@@ -4,6 +4,31 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [unreleased] Unreleased
 
+## [2.2.29] 2019-09-24;
+### Fixed
+- `wpbrowser` template class to make sure the environment file name is respected when set to different values
+- some `wpbrowser` template text
+- output of `WPCLI` module when exit code is `0` and there are both `stdout` and `stderr` outputs, fixes #316
+
+## [2.2.28] 2019-09-19;
+### Fixed
+- `WPCLI` module: do not mark command as failed, thus do not throw, if exit code is `0`, fixes #312
+
+## [2.2.27] 2019-09-17;
+### Fixed
+- command line parsing issue in the `WPCLI` module, fixes #310
+
+## [2.2.26] 2019-09-17;
+### Fixed
+- double class definition issues dealing with Codeception and PHPUnit versions
+
+## [2.2.25] 2019-09-13;
+### Changed
+- smaller refactoring to avoid introducing `STATIC_ANALYSIS` environment var in code (thanks @szepeviktor)
+
+### Fixed
+- restore Codeception `2.5` and `3.0` support in `composer.json` file erroneously removed in `2.2.24`
+
 ## [2.2.24] 2019-09-06;
 ### Changed
 - a number of refactorings and fixings following addition of `phpstan`, fixes #291 (thanks @szepeviktor)
@@ -1128,4 +1153,9 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 [2.2.22]: https://github.com/lucatume/wp-browser/compare/2.2.21...2.2.22
 [2.2.23]: https://github.com/lucatume/wp-browser/compare/2.2.22...2.2.23
 [2.2.24]: https://github.com/lucatume/wp-browser/compare/2.2.23...2.2.24
-[unreleased]: https://github.com/lucatume/wp-browser/compare/2.2.24...HEAD
+[2.2.25]: https://github.com/lucatume/wp-browser/compare/2.2.24...2.2.25
+[2.2.26]: https://github.com/lucatume/wp-browser/compare/2.2.25...2.2.26
+[2.2.27]: https://github.com/lucatume/wp-browser/compare/2.2.26...2.2.27
+[2.2.28]: https://github.com/lucatume/wp-browser/compare/2.2.27...2.2.28
+[2.2.29]: https://github.com/lucatume/wp-browser/compare/2.2.28...2.2.29
+[unreleased]: https://github.com/lucatume/wp-browser/compare/2.2.29...HEAD

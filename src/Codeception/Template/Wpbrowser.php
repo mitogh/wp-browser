@@ -52,6 +52,10 @@ class Wpbrowser extends Bootstrap
 
         if ($this->noInteraction || $this->quiet) {
             $interactive = false;
+            $this->input->setInteractive(false);
+        } else {
+            $interactive = true;
+            $this->input->setInteractive(true);
         }
 
         if ($input->getOption('namespace')) {
@@ -187,7 +191,7 @@ class Wpbrowser extends Bootstrap
                 'commands' => $this->getAddtionalCommands(),
             ],
             'params' => [
-                '.env.testing',
+                trim($this->envFileName),
             ],
         ];
 
@@ -289,7 +293,7 @@ class Wpbrowser extends Bootstrap
         $this->say('---');
         $this->say();
 
-        while (strpos($this->envFileName, '.env.testing') !== 0) {
+        while (strpos($this->envFileName, '.env') !== 0) {
             $this->envFileName = $this->ask(
                 'How would you like to call the env configuration file? (Should start with ".env")',
                 '.env.testing'
@@ -720,5 +724,15 @@ EOF;
             exit(0);
         }
         echo PHP_EOL;
+    }
+
+    /**
+     * Sets the template working directory.
+     *
+     * @param string $workDir The path to the working directory the template should use.
+     */
+    public function setWorkDir($workDir)
+    {
+        chdir($workDir);
     }
 }
