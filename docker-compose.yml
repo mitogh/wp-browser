@@ -1,5 +1,12 @@
 version: '3.2'
 
+volumes:
+
+  # This volume will be filled by the `wp` container with the contents of the /var/www/html directory.
+  # Any other container that uses modules in need to modify the /var/www/html contents will be able to do so writing to
+  # this volume.
+  wp_web_root:
+
 services:
 
   db:
@@ -10,14 +17,14 @@ services:
       MYSQL_USER: wordrpess
       MYSQL_PASSWORD: wordpress
     command: mysqld --debug-no-sync
-    ports:
-      - "4406:3306"
 
   wp:
     build:
       context: .
       dockerfile: docker/wordpress/Dockerfile
     image: ${COMPOSE_PROJECT_NAME:-wpbrowser}_wp:latest
+    volumes:
+      - "wp_web_root:/var/www/html"
     links:
       - db
     environment:
@@ -71,6 +78,7 @@ services:
     image: wpbrowser_test_runner:latest
     volumes:
       - ./tests:/project/tests
+      - ./src:/project/src
     environment:
       # As XDebug remote host use the host hostname on Docker for Mac or Windows, but allow overriding it.
       # Build systems are usually Linux-based.
@@ -83,6 +91,7 @@ services:
     image: wpbrowser_test_runner:latest
     volumes:
       - ./tests:/project/tests
+      - ./src:/project/src
     links:
       - db
       - wp
@@ -98,6 +107,8 @@ services:
     image: wpbrowser_test_runner:latest
     volumes:
       - ./tests:/project/tests
+      - ./src:/project/src
+      - "wp_web_root:/var/www/html"
     links:
       - db
       - wp
