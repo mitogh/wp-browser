@@ -5,6 +5,7 @@ modules:
     - WPWebDriver
     - WPDb
     - WPFilesystem
+    - Waiter
   config:
     WPWebDriver:
       url: '%CHROMEDRIVER_WP_URL%'
@@ -30,7 +31,7 @@ modules:
       url: '%CHROMEDRIVER_WP_URL%'
       tablePrefix: 'wp_'
     WPFilesystem:
-      wpRootFolder: '%WP_ROOT_FOLDER%'
+      wpRootFolder: '%WEB_ROOT_FOLDER%'
       themes: '/wp-content/themes'
       plugins: '/wp-content/plugins'
       mu-plugins: '/wp-content/mu-plugins'
