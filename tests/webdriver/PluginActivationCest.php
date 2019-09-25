@@ -11,26 +11,29 @@ class PluginActivationCest
 
     public function _before(WebdriverTester $I)
     {
-        $this->deleteFiles();
+        $this->deleteFiles($I);
     }
 
-    protected function deleteFiles()
+    protected function deleteFiles(WebdriverTester $I)
     {
         foreach ($this->delete as $file) {
             if (file_exists($file)) {
                 unlink($file);
             }
         }
+        if (count($this->delete)) {
+            $I->waitForFileToNotExist(end($this->delete));
+        }
     }
 
     public function _after(WebdriverTester $I)
     {
-        $this->deleteFiles();
+        $this->deleteFiles($I);
     }
 
     public function _failed(WebdriverTester $I)
     {
-        $this->deleteFiles();
+        $this->deleteFiles($I);
     }
 
     /**
@@ -89,6 +92,8 @@ HANDLEBARS;
             $compiled = str_replace('{{letter}}', $letter, $template);
             $I->havePlugin("plugin-{$letter}/plugin-{$letter}.php", $compiled);
         }
+
+        $I->waitForFileToExist($I->getWpPluginsPath('plugin-Z/plugin-Z.php'));
     }
 
     /**
