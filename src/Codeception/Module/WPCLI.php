@@ -67,8 +67,7 @@ class WPCLI extends Module
      */
     protected $config = [
         'throw' => true,
-        'timeout' => 60,
-        'allowRoot' => true,
+        'timeout' => 60
     ];
     /**
      * The process timeout.
