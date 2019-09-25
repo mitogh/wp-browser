@@ -25,7 +25,7 @@ define( 'WP_CACHE_KEY_SALT', '7V%9NEn<=oe6@c7+oFc8XxQ5J2@tFwk.g98p]p4ys:BGOaqsKp
 $table_prefix = 'wp_';
 
 $current_site = filter_has_var( INPUT_SERVER, 'HTTP_HOST' ) ?
-	$_SERVER['HTTP_HOST']
+	trim( $_SERVER['HTTP_HOST'],'/' )
 	: 'wp.test';
 
 /*
