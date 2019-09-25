@@ -510,7 +510,7 @@ class WPFilesystem extends Filesystem
      */
     public function amInPluginPath($path)
     {
-        $this->amInPath($this->config['plugins'] . DIRECTORY_SEPARATOR . Utils::unleadslashit($path));
+        $this->amInPath($this->getWpPluginsPath($path));
     }
 
     /**
@@ -1265,5 +1265,28 @@ CSS;
         $code = preg_replace('/^\<\?php\\s*/', '', $code) ?: '';
 
         return $code;
+    }
+
+    /**
+     * Returns the path to the plugins root directory, optionally appending a path.
+     *
+     * @example
+     * ```php
+     * // Get the path to the plugin root directory.
+     * $pluginRootDir = $I->getWpPluginsPath();
+     *
+     * // Get the path to a plugins file.
+     * $pluginFile = $I->getWpPluginsPath('my-plugin/plugin.php');
+     * ```
+     *
+     * @param string|null $path The path to append.
+     *
+     * @return string The path to the plugins root directory, or a plugins sub-directory or file.
+     */
+    public function getWpPluginsPath($path = null)
+    {
+        return $path === null ?
+            Utils::untrailslashit($this->config['plugins'])
+            : Utils::untrailslashit($this->config['plugins']) . '/' . Utils::unleadslashit($path);
     }
 }

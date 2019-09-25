@@ -109,6 +109,9 @@ modules:
 			<a href="#getuploadspath">getUploadsPath</a>
 		</li>
 		<li>
+			<a href="#getwppluginspath">getWpPluginsPath</a>
+		</li>
+		<li>
 			<a href="#getwprootfolder">getWpRootFolder</a>
 		</li>
 		<li>
@@ -492,6 +495,20 @@ modules:
 <ul>
 <li><code>string</code> <strong>$file</strong> - The file path, relative to the uploads folder.</li>
 <li><code>mixed</code> <strong>$date</strong> - A string compatible with <code>strtotime</code>, a Unix timestamp or a Date object.</li></ul>
+  
+
+<h3>getWpPluginsPath</h3>
+
+<hr>
+
+<p>Returns the path to the plugins root directory, optionally appending a path.</p>
+<pre><code class="language-php">    // Get the path to the plugin root directory.
+    $pluginRootDir = $I-&gt;getWpPluginsPath();
+        // Get the path to a plugins file.
+    $pluginFile = $I-&gt;getWpPluginsPath('my-plugin/plugin.php');</code></pre>
+<h4>Parameters</h4>
+<ul>
+<li><code>string/null</code> <strong>$path</strong> - The path to append.</li></ul>
   
 
 <h3>getWpRootFolder</h3>
