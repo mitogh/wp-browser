@@ -30,7 +30,7 @@ RUN docker-php-ext-install \
 ## Add mysql driver required for wp-browser
 RUN docker-php-ext-install mysqli
 
-# Install XDebug extension.
+# Build XDebug extension.
 RUN pecl install xdebug
 
 # Create the /project directory and change to it.

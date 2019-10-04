@@ -374,18 +374,18 @@ wordpress_healthcheck:
 chromedriver_healthcheck:
 	docker-compose run --rm chromedriver bash -c 'curl -I http://wp.test/ && curl -I http://test1.wp.test/ && curl -I http://test2.wp.test/'
 
-unit_suites = unit
-functional_suites = climodule
+unit_suites = command unit
+functional_suites = acceptance cli climodule dbunit functional muloader wpcli_module wpfunctional wploader_multisite wploader_wpdb_interaction wploadersuite wpmodule
 web_suites = webdriver
 
 $(unit_suites): %:
-	@docker-compose --project-name test-$@ run --rm test_runner run $@ -f --ext DotReporter
+	@docker-compose --project-name test-$@ run --rm test_runner run $@ -f
 
 test_unit: $(unit_suites)
 
 $(functional_suites): %:
 	@docker-compose --project-name test-$@ run --rm wp_waiter \
-		&& docker-compose --project-name test-$@ run wp_test_runner run $@ -f --ext DotReporter
+		&& docker-compose --project-name test-$@ run wp_test_runner run $@ -f
 
 test_functional: $(functional_suites)
 

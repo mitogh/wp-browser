@@ -7,10 +7,15 @@ volumes:
   # this volume.
   wp_web_root:
 
+networks:
+  base:
+
 services:
 
   db:
     image: mariadb:latest
+    networks:
+      - base
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: 1
       MYSQL_DATABASE: wordpress
@@ -23,6 +28,13 @@ services:
       context: .
       dockerfile: docker/wordpress/Dockerfile
     image: ${COMPOSE_PROJECT_NAME:-wpbrowser}_wp:latest
+    networks:
+      base:
+        aliases:
+          - wp
+          - "wp.test"
+          - "test1.wp.test"
+          - "test2.wp.test"
     volumes:
       - "wp_web_root:/var/www/html"
     links:
@@ -35,11 +47,10 @@ services:
 
   chromedriver:
     image: selenium/standalone-chrome:3.141.59-oxygen
-    links:
-      - "wp:wp.test"
-      - "wp:test1.wp.test"
-      - "wp:test2.wp.test"
-
+    networks:
+      - base
+    depends_on:
+      - wp
   db_waiter:
     image: waisbrot/wait
     links:
@@ -49,7 +60,9 @@ services:
 
   wp_waiter:
     image: waisbrot/wait
-    links:
+    networks:
+      - base
+    depends_on:
       - db
       - wp
     environment:
@@ -57,7 +70,9 @@ services:
 
   web_waiter:
     image: waisbrot/wait
-    links:
+    networks:
+      - base
+    depends_on:
       - db
       - wp
       - chromedriver
@@ -76,6 +91,8 @@ services:
         BUILD_PHP_IDEKEY: ${BUILD_PHP_IDEKEY:-PHPSTORM}
         BUILD_XDEBUG_ENABLE: ${BUILD_XDEBUG_ENABLE:-1}
     image: wpbrowser_test_runner:latest
+    networks:
+      - base
     volumes:
       - ./tests:/project/tests
       - ./src:/project/src
@@ -89,10 +106,13 @@ services:
 
   wp_test_runner:
     image: wpbrowser_test_runner:latest
+    networks:
+      - base
     volumes:
       - ./tests:/project/tests
       - ./src:/project/src
-    links:
+      - "wp_web_root:/var/www/html"
+    depends_on:
       - db
       - wp
     environment:
@@ -105,11 +125,13 @@ services:
 
   web_test_runner:
     image: wpbrowser_test_runner:latest
+    networks:
+      - base
     volumes:
       - ./tests:/project/tests
       - ./src:/project/src
       - "wp_web_root:/var/www/html"
-    links:
+    depends_on:
       - db
       - wp
       - chromedriver
