@@ -38,8 +38,9 @@ class User
     /**
      * Returns the user level for a user role.
      *
-     * @param string $role The input role.
-     * @return string The corresponding user level.
+     * @param string|int $role The input role slug (e.g. 'subscriber') or level for identity.
+     *
+     * @return int The corresponding user level, an integer value.
      */
     public static function getLevelForRole($role = 'subscriber')
     {
